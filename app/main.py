@@ -16,7 +16,6 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     check_configuration()
-    # папки может не быть при установке с нуля: фотографии в репозиторий не попадают
     STATIC_DIR.mkdir(parents=True, exist_ok=True)
     init_db()
     yield

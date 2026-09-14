@@ -5,7 +5,9 @@
 
 const state = {
   categories: [],
+  allProducts: [],    // весь каталог: по нему ищем, не дёргая сервер
   categoryId: null,   // null — показываем все товары
+  query: "",          // что набрали в поиске
   product: null,      // открытая карточка
   variant: null,      // выбранная фасовка
   qty: 1,
@@ -105,6 +107,7 @@ async function loadCatalog() {
       api("/api/products"),
     ]);
     state.categories = categories;
+    state.allProducts = products;   // по этому списку работает поиск, без запросов
 
     renderCategories();
     renderProducts(products);
@@ -125,23 +128,20 @@ function renderCategories() {
     .join("");
 }
 
-function renderProducts(products) {
+function renderProducts(products, empty = "Товаров нет") {
   el("list-count").textContent = `${products.length} ${plural(products.length)}`;
   if (!products.length) {
-    el("products").innerHTML = `<div class="msg" style="grid-column:1/-1">Товаров нет</div>`;
+    el("products").innerHTML = `<div class="msg" style="grid-column:1/-1">${esc(empty)}</div>`;
     return;
   }
   el("products").innerHTML = products
     .map((p) => {
-      const sub = p.weights.length > 1
-        ? `${p.weights.length} ${plural(p.weights.length, "фасовка", "фасовки", "фасовок")}: ${p.weights.join(", ")}`
-        : p.weights[0];
       const prefix = p.weights.length > 1 ? "от " : "";
       return `
         <div class="pcard" data-product="${p.id}">
-          ${photo(p.photo, 100)}
+          ${photo(p.photo, 128)}
           <div class="nm" style="margin-top:8px">${esc(p.name)}</div>
-          <div class="sub">${esc(sub)}</div>
+          <div class="sub">${esc(p.weights.join(" · "))}</div>
           <div class="row">
             <span class="prc" style="font-size:13.5px">${prefix}${money(p.min_price)}</span>
             <span class="qb" style="background:#E30613;color:#fff"><i class="ti ti-plus" style="font-size:15px"></i></span>
@@ -159,7 +159,44 @@ function plural(n, one = "товар", few = "товара", many = "товар�
   return many;
 }
 
+/** «Ё» и «е» покупатель набирает как придётся, а товары у нас с «ё». */
+const normalize = (text) => text.toLowerCase().replace(/ё/g, "е");
+
+/** Убирает поиск, список не трогает: его рисует тот, кто вызвал. */
+function clearSearch() {
+  state.query = "";
+  el("q").value = "";
+  el("q-clear").classList.add("hidden");
+}
+
+/** Поиск идёт по уже загруженному каталогу: 24 товара, запрос к серверу лишний. */
+function search(query) {
+  // иначе запоздавший ответ по категории ляжет поверх результатов поиска
+  requestId += 1;
+  state.query = query.trim();
+  el("q-clear").classList.toggle("hidden", !query);
+  if (!state.allProducts.length) return;   // каталог не загрузился, искать не в чем
+
+  if (state.categoryId !== null) {
+    state.categoryId = null;   // ищем по всему каталогу, а не внутри категории
+    renderCategories();        // перерисовываем ленту только когда она изменилась
+  }
+  if (!state.query) {
+    el("list-title").textContent = "Все товары";
+    return renderProducts(state.allProducts);
+  }
+
+  const needle = normalize(state.query);
+  el("list-title").textContent = "Найдено";
+  renderProducts(
+    state.allProducts.filter((p) => normalize(p.name).includes(needle)),
+    "Ничего не нашлось. Попробуйте другое слово.",
+  );
+}
+
 async function selectCategory(categoryId) {
+  // выбрали категорию — поиск больше не действует, иначе список и поле врут
+  if (state.query) clearSearch();
   // 0 — чип «Все»; повторное нажатие на выбранную категорию тоже сбрасывает отбор
   const next = categoryId === 0 || state.categoryId === categoryId ? null : categoryId;
   const my = ++requestId;
@@ -613,7 +650,18 @@ async function openCart(notice = "") {
 
 // ---------- события ----------
 
+el("q").addEventListener("input", (event) => search(event.target.value));
+// Enter убирает клавиатуру: формы нет, отправлять нечего
+el("q").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") el("q").blur();
+});
+
 document.addEventListener("click", (event) => {
+  if (event.target.closest("#q-clear")) {
+    clearSearch();
+    return search("");
+  }
+
   const category = event.target.closest("[data-category]");
   if (category) return selectCategory(Number(category.dataset.category));
 

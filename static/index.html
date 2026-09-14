@@ -25,10 +25,18 @@ body.tabs-on{--gap-bottom:calc(20px + var(--tabs))}
 body.action-on{--gap-bottom:88px}
 body.tabs-on.action-on{--gap-bottom:calc(88px + var(--tabs))}
 .hidden{display:none!important}
-.hw{background:#fff;padding:calc(12px + var(--safe-top)) 16px 14px;border-bottom:1px solid #ECECEC;position:sticky;top:0;z-index:5}
+/* шапка цветная: под ней лежит статус-бар, а часы и заряд система рисует
+   белым — на белом фоне они пропадали */
+.hw{background:#E30613;padding:calc(12px + var(--safe-top)) 16px 12px;position:sticky;top:0;z-index:5}
 .brand{display:flex;justify-content:space-between;align-items:center}
-.logo{font-size:22px;font-weight:700;color:#E30613;letter-spacing:.4px}
-.loc{font-size:13px;color:#7A7A7A}
+.logo{font-size:21px;font-weight:700;color:#fff;letter-spacing:.4px}
+.loc{font-size:13px;color:rgba(255,255,255,.85)}
+.search{display:flex;align-items:center;gap:9px;margin-top:11px;background:rgba(255,255,255,.17);border-radius:12px;padding:0 12px}
+.search i{font-size:19px;color:rgba(255,255,255,.75)}
+/* 16px обязательны: на меньшем шрифте iOS зумит страницу при касании поля */
+.search input{flex:1;min-width:0;background:none;border:none;outline:none;color:#fff;font-size:16px;font-family:inherit;padding:11px 0}
+.search input::placeholder{color:rgba(255,255,255,.7)}
+.search .clear{color:rgba(255,255,255,.85);font-size:18px;padding:9px;margin:-9px}
 .hd{background:#E30613;color:#fff;padding:calc(13px + var(--safe-top)) 16px 13px;font-size:16px;font-weight:500;display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:5}
 .hd i{font-size:21px;padding:8px;margin:-8px;cursor:pointer}
 .wrap{padding:14px 16px calc(var(--gap-bottom) + var(--safe-bot))}
@@ -44,11 +52,11 @@ h2{font-size:19px;font-weight:600;margin:0 0 12px}
 .chip img{width:30px;height:30px;border-radius:50%;object-fit:contain;background:#fff}
 .chip.plain{padding-left:15px;padding-right:15px}
 .card{background:#fff;border-radius:14px;padding:13px;margin-bottom:10px}
-.pcard{background:#fff;border-radius:14px;padding:9px;display:flex;flex-direction:column}
+.pcard{background:#fff;border-radius:14px;padding:10px;display:flex;flex-direction:column}
 .ph{background:#fff;border-radius:10px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;color:#C8C8C8}
 .ph img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:4px}
-.nm{font-size:12.5px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:34px}
-.sub{color:#7A7A7A;font-size:11px;margin:3px 0 7px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:28px}
+.nm{font-size:13px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:34px}
+.sub{color:#7A7A7A;font-size:11.5px;margin:3px 0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mut{color:#7A7A7A;font-size:13px}
 .prc{color:#E30613;font-weight:600}
 .row{display:flex;justify-content:space-between;align-items:center}
@@ -88,7 +96,12 @@ body.tabs-on .ft{bottom:calc(var(--tabs) + var(--safe-bot));padding-bottom:12px}
   <div class="hw">
     <div class="brand">
       <div class="logo">ROZMART</div>
-      <div class="loc"><i class="ti ti-map-pin" style="color:#E30613"></i> Ташкент</div>
+      <div class="loc"><i class="ti ti-map-pin"></i> Ташкент</div>
+    </div>
+    <div class="search">
+      <i class="ti ti-search"></i>
+      <input id="q" placeholder="Поиск по каталогу" autocomplete="off" enterkeyhint="search">
+      <i class="ti ti-x clear hidden" id="q-clear"></i>
     </div>
   </div>
   <div class="chips" id="categories"></div>
@@ -161,7 +174,7 @@ body.tabs-on .ft{bottom:calc(var(--tabs) + var(--safe-bot));padding-bottom:12px}
   </div>
 </div>
 
-<!-- __V__ подставляет сервер: без неё Telegram показывает скрипт из кэша -->
+<!-- версию подставляет сервер: без неё Telegram показывает скрипт из кэша -->
 <script src="/static/app.js?v=__V__"></script>
 </body>
 </html>
