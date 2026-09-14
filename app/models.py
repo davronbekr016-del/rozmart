@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, false, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, String, Text, false, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -73,6 +73,9 @@ class Order(Base):
     # ключ попытки оформления с телефона клиента. Повторная отправка того же
     # заказа (двойной тап, обрыв связи, ретрай) вернёт уже созданный заказ.
     client_key: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
+    # аккаунт Telegram, из которого оформили заказ: по нему покупатель видит
+    # свои заказы. BigInteger — идентификаторы Telegram давно вышли за 2 млрд
+    telegram_id: Mapped[int | None] = mapped_column(BigInteger, index=True)
 
     customer_name: Mapped[str] = mapped_column(String(200))
     phone: Mapped[str] = mapped_column(String(30))

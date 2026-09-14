@@ -63,7 +63,11 @@ h2{font-size:19px;font-weight:600;margin:0 0 12px}
   <div class="hw">
     <div class="brand">
       <div class="logo">ROZMART</div>
-      <div class="loc"><i class="ti ti-map-pin" style="color:#E30613"></i> Ташкент</div>
+      <div style="display:flex;align-items:center;gap:15px">
+        <div class="loc"><i class="ti ti-map-pin" style="color:#E30613"></i> Ташкент</div>
+        <i class="ti ti-receipt hidden" id="my-orders"
+           style="font-size:23px;color:#E30613;padding:7px;margin:-7px"></i>
+      </div>
     </div>
   </div>
   <div class="wrap">
@@ -113,6 +117,11 @@ h2{font-size:19px;font-weight:600;margin:0 0 12px}
     <div class="err hidden" id="checkout-error"></div>
   </div>
   <div class="ft"><button class="btn" id="submit-order">Подтвердить заказ</button></div>
+</div>
+
+<div id="screen-orders" class="hidden">
+  <div class="hd"><i class="ti ti-chevron-left" data-go="catalog"></i><span>Мои заказы</span></div>
+  <div class="wrap" id="orders-body"></div>
 </div>
 
 <div id="screen-done" class="hidden">

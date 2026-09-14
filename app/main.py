@@ -8,12 +8,14 @@ from fastapi.staticfiles import StaticFiles
 from app.catalog import router as catalog_router
 from app.db import init_db
 from app.orders import router as orders_router
+from app.telegram import check_configuration
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    check_configuration()
     # папки может не быть при установке с нуля: фотографии в репозиторий не попадают
     STATIC_DIR.mkdir(parents=True, exist_ok=True)
     init_db()

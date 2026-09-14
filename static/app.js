@@ -48,8 +48,15 @@ function money(value) {
   return value.toLocaleString("ru-RU").replace(/\s/g, " ") + " UZS";
 }
 
+/** Подписанные данные Telegram. Сервер проверяет подпись сам — здесь мы их
+ *  только передаём, доверять клиентской копии нельзя. */
+function tgHeaders() {
+  const tg = window.Telegram && window.Telegram.WebApp;
+  return tg && tg.initData ? { "X-Telegram-Init-Data": tg.initData } : {};
+}
+
 async function api(path) {
-  const response = await fetch(path);
+  const response = await fetch(path, { headers: tgHeaders() });
   if (!response.ok) {
     const error = new Error(`${path} -> ${response.status}`);
     error.status = response.status;   // 404 «товара больше нет» отличаем от обрыва связи
@@ -233,15 +240,19 @@ function updateTotal() {
 
 // ---------- корзина ----------
 
-/** Сохраняет корзину на телефоне. Состав изменился — значит это уже другой
- *  заказ, и ключ прошлой попытки оформления сбрасывается. */
-function saveCart() {
-  state.clientKey = null;
+function persistCart() {
   try {
     localStorage.setItem(CART_KEY, JSON.stringify({ cart: state.cart, clientKey: state.clientKey }));
   } catch (error) {
     console.error(error);   // приватный режим: корзина просто не переживёт перезапуск
   }
+}
+
+/** Состав изменился — значит это уже другой заказ, и ключ прошлой попытки
+ *  оформления больше не годится. */
+function saveCart() {
+  state.clientKey = null;
+  persistCart();
 }
 
 function loadSavedCart() {
@@ -420,7 +431,7 @@ async function submitOrder() {
   try {
     const response = await fetch("/api/orders", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...tgHeaders() },
       body: JSON.stringify({
         customer_name: fields["f-name"],
         phone: fields["f-phone"],
@@ -444,6 +455,13 @@ async function submitOrder() {
     if (response.status === 409) {
       return openCart("Цены изменились. Проверьте корзину и подтвердите заказ заново.");
     }
+    if (response.status === 401) {
+      // подпись Telegram живёт сутки: приложение провисело открытым дольше
+      throw Object.assign(new Error(body && body.detail
+        ? body.detail
+        : "Закройте и откройте приложение заново, вход в Telegram устарел."),
+        { forUser: true });
+    }
     if (!response.ok) {
       // текст сервера показываем только там, где он написан для покупателя
       const detail = response.status < 500 && body && typeof body.detail === "string"
@@ -456,6 +474,11 @@ async function submitOrder() {
     state.scrollY = 0;   // «Вернуться в каталог» — сверху, а не там, где смотрели товар
     saveCart();
     renderCartBar();
+    if (!body) {
+      // заказ создан, но ответ пришёл не в том виде — второй раз отправлять нельзя
+      throw Object.assign(new Error("Заказ отправлен. Найдите его в «Моих заказах»."),
+        { forUser: true });
+    }
     renderDone(body);
     show("done");
   } catch (error) {
@@ -495,9 +518,48 @@ function renderDone(order) {
     </div>`;
 }
 
+// ---------- мои заказы ----------
+
+async function openOrders() {
+  show("orders");
+  el("orders-body").innerHTML = `<div class="msg">Загружаем…</div>`;
+  try {
+    const orders = await api("/api/my-orders");
+    el("orders-body").innerHTML = orders.length
+      ? orders.map(orderCard).join("")
+      : `<div class="msg">Вы ещё ничего не заказывали</div>`;
+  } catch (error) {
+    console.error(error);
+    el("orders-body").innerHTML = `<div class="msg">${error.status === 401
+      ? "Закройте и откройте приложение заново, вход в Telegram устарел."
+      : "Не удалось загрузить заказы."}</div>`;
+  }
+}
+
+function orderCard(order) {
+  const when = new Date(order.created_at).toLocaleString("ru-RU", {
+    day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
+  });
+  return `
+    <div class="card">
+      <div class="row" style="margin-bottom:7px">
+        <span style="font-weight:600">${esc(order.number)}</span>
+        <span class="prc">${money(order.total)}</span>
+      </div>
+      <div class="row">
+        <span class="mut" style="font-size:12px">${esc(when)}</span>
+        <span class="mut" style="font-size:12px">${esc(order.status_text)}</span>
+      </div>
+      <div class="mut" style="font-size:12px;margin-top:7px">
+        ${order.items.length} ${plural(order.items.length, "позиция", "позиции", "позиций")}
+        · ${esc(order.delivery_slot)}
+      </div>
+    </div>`;
+}
+
 // ---------- переключение экранов ----------
 
-const SCREENS = ["catalog", "product", "cart", "checkout", "done"];
+const SCREENS = ["catalog", "product", "cart", "checkout", "done", "orders"];
 
 function show(name) {
   for (const s of SCREENS) el(`screen-${s}`).classList.toggle("hidden", s !== name);
@@ -543,6 +605,7 @@ document.addEventListener("click", (event) => {
   }
   if (event.target.closest("#back")) return show("catalog");
   if (event.target.closest("#add")) return addToCart();
+  if (event.target.closest("#my-orders")) return openOrders();
 
   // корзина
   const minus = event.target.closest("[data-cart-minus]");
@@ -568,8 +631,12 @@ document.addEventListener("click", (event) => {
     return renderCheckout();
   }
   if (event.target.closest("#to-checkout")) {
-    // ключ живёт до конца попытки: повторная отправка не заведёт второй заказ
-    if (!state.clientKey) state.clientKey = crypto.randomUUID();
+    // ключ живёт до конца попытки, в том числе если приложение свернули
+    // и открыли заново: повторная отправка не заведёт второй заказ
+    if (!state.clientKey) {
+      state.clientKey = crypto.randomUUID();
+      persistCart();
+    }
     state.cartNotice = "";
     el("checkout-error").classList.add("hidden");   // ошибка прошлой попытки
     renderCheckout();
@@ -604,6 +671,14 @@ function setupTelegram() {
     if (tg.disableVerticalSwipes) tg.disableVerticalSwipes();
   } catch (error) {
     console.error(error);   // старый клиент не знает часть команд — не повод падать
+  }
+
+  if (!tg.initData) return;   // открыто в браузере: заказов у нас на него нет
+  el("my-orders").classList.remove("hidden");
+  // подставляем имя, чтобы не набирать его руками. Телефона Telegram не даёт
+  const user = tg.initDataUnsafe && tg.initDataUnsafe.user;
+  if (user) {
+    el("f-name").value = [user.first_name, user.last_name].filter(Boolean).join(" ");
   }
 }
 

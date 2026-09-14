@@ -3,6 +3,7 @@
 Служебные поля учётной системы (код REGOS, складское наименование) сюда
 намеренно не попадают — клиенту они не показываются (BR-36).
 """
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -93,6 +94,8 @@ class OrderItemOut(BaseModel):
 class OrderOut(BaseModel):
     number: str
     status: str
+    status_text: str      # то же состояние словами покупателя
+    created_at: datetime
     delivery_slot: str
     payment_method: str
     goods_total: int

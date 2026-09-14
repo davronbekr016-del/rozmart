@@ -1,4 +1,6 @@
 """Оформление заказа."""
+from datetime import timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -7,6 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.db import get_db
 from app.models import Order, OrderItem, Variant
 from app.schemas import OrderIn, OrderItemOut, OrderOut
+from app.telegram import TelegramUser, buyer, require_user
 
 router = APIRouter(prefix="/api", tags=["Заказы"])
 
@@ -20,6 +23,10 @@ STATUS_BY_PAYMENT = {"cash": "CONFIRMED", "online": "NEW"}
 
 # розница: больше сотни одинаковых пачек — это уже опт, такие заказы идут через оператора
 MAX_ITEM_QUANTITY = 99
+
+# служебный код состояния покупателю ни о чём не говорит. Остальные состояния
+# из спецификации появятся вместе с рабочим местом оператора, который их ставит
+STATUS_TEXT = {"NEW": "Ждёт оплаты", "CONFIRMED": "Принят"}
 
 
 def build_order_number(order_id: int) -> str:
@@ -37,6 +44,10 @@ def to_out(order: Order) -> OrderOut:
     return OrderOut(
         number=order.number,
         status=order.status,
+        status_text=STATUS_TEXT.get(order.status, "В работе"),
+        # в базе время без пояса, но оно всегда UTC: помечаем явно, иначе
+        # телефон покажет его как местное и промахнётся на пять часов
+        created_at=order.created_at.replace(tzinfo=timezone.utc),
         delivery_slot=order.delivery_slot,
         payment_method=order.payment_method,
         goods_total=order.goods_total,
@@ -52,12 +63,23 @@ def to_out(order: Order) -> OrderOut:
 
 
 @router.post("/orders", response_model=OrderOut, status_code=201)
-def create_order(data: OrderIn, db: Session = Depends(get_db)):
+def create_order(
+    data: OrderIn,
+    db: Session = Depends(get_db),
+    user: TelegramUser | None = Depends(buyer),
+):
     """Создаёт заказ. Цены берутся из базы, а не из запроса клиента."""
-    if data.client_key:
-        already = find_by_client_key(db, data.client_key)
+    telegram_id = user.id if user else None
+    client_key = data.client_key
+    if client_key:
+        already = find_by_client_key(db, client_key)
         if already is not None:
-            return to_out(already)
+            # свой ключ — возвращаем тот же заказ вместо второго такого же.
+            # чужой — просто не занимаем его: подставив украденный ключ, чужой
+            # заказ не прочитать, а свой оформить можно
+            if already.telegram_id == telegram_id:
+                return to_out(already)
+            client_key = None
 
     quantities: dict[int, int] = {}
     for item in data.items:
@@ -84,7 +106,8 @@ def create_order(data: OrderIn, db: Session = Depends(get_db)):
     order = Order(
         number="",
         status=STATUS_BY_PAYMENT[data.payment_method],
-        client_key=data.client_key,
+        client_key=client_key,
+        telegram_id=telegram_id,
         customer_name=data.customer_name,
         phone=data.phone,
         address=data.address,
@@ -136,21 +159,27 @@ def create_order(data: OrderIn, db: Session = Depends(get_db)):
     except IntegrityError:
         # два одинаковых запроса пришли одновременно: заказ уже создал первый
         db.rollback()
-        already = find_by_client_key(db, data.client_key) if data.client_key else None
-        if already is None:
+        already = find_by_client_key(db, client_key) if client_key else None
+        if already is None or already.telegram_id != telegram_id:
             raise
         return to_out(already)
     return to_out(order)
 
 
-@router.get("/orders/{number}", response_model=OrderOut)
-def get_order(number: str, db: Session = Depends(get_db)):
-    order = db.scalar(
-        select(Order).where(Order.number == number).options(selectinload(Order.items))
+@router.get("/my-orders", response_model=list[OrderOut])
+def my_orders(
+    db: Session = Depends(get_db),
+    user: TelegramUser = Depends(require_user),
+):
+    """Заказы этого покупателя, свежие сверху."""
+    orders = db.scalars(
+        select(Order)
+        .where(Order.telegram_id == user.id)
+        .order_by(Order.id.desc())
+        .limit(20)
+        .options(selectinload(Order.items))
     )
-    if order is None:
-        raise HTTPException(status_code=404, detail="Заказ не найден")
-    return to_out(order)
+    return [to_out(order) for order in orders]
 
 
 @router.get("/delivery-price")

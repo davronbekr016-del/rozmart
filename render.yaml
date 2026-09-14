@@ -7,3 +7,9 @@ services:
     # host 0.0.0.0 обязателен: иначе сервис слушает только сам себя
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
+    envVars:
+      # Токен бота из BotFather. sync: false — значение вводится в панели Render
+      # и в репозиторий не попадает. Без него приложение не запустится: молча
+      # работающий магазин без проверки входа хуже упавшего.
+      - key: BOT_TOKEN
+        sync: false
