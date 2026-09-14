@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.catalog import router as catalog_router
@@ -32,8 +32,18 @@ app.include_router(orders_router)
 
 @app.get("/", include_in_schema=False)
 def index():
-    """Клиентское приложение."""
-    return FileResponse(STATIC_DIR / "index.html")
+    """Клиентское приложение.
+
+    Браузер внутри Telegram держит скрипт в кэше и после обновления показывает
+    старую версию. Поэтому саму страницу запрещаем кэшировать, а к скрипту
+    дописываем время его правки: у новой версии другой адрес, и кэш промахнётся.
+    """
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    version = int((STATIC_DIR / "app.js").stat().st_mtime)
+    return HTMLResponse(
+        html.replace("__V__", str(version)),
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.get("/health")
