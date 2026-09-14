@@ -7,25 +7,42 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
 <style>
-:root{--safe:env(safe-area-inset-bottom,0px)}
+:root{
+  /* в полноэкранном режиме сверху лежат часы и кнопки Telegram, снизу — жест
+     «домой». Обе величины даёт сам Telegram, а env() выручает вне его */
+  --safe-top:calc(var(--tg-safe-area-inset-top,0px) + var(--tg-content-safe-area-inset-top,0px));
+  /* сначала величина от Telegram, иначе системная. max() здесь нельзя: на
+     старом движке он сделал бы невалидным весь padding, а не одно значение */
+  --safe-bot:var(--tg-safe-area-inset-bottom,env(safe-area-inset-bottom,0px));
+  --safe-l:env(safe-area-inset-left,0px);
+  --safe-r:env(safe-area-inset-right,0px);
+  --tabs:57px;
+}
 *{box-sizing:border-box}
-body{margin:0;background:#F5F5F5;color:#111;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;font-size:15px}
+/* боковые вырезы бывают только в альбомной ориентации, зато сразу у всего */
+body{margin:0;padding-left:var(--safe-l);padding-right:var(--safe-r);background:#F5F5F5;color:#111;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;font-size:15px;--gap-bottom:20px}
+body.tabs-on{--gap-bottom:calc(20px + var(--tabs))}
+body.action-on{--gap-bottom:88px}
+body.tabs-on.action-on{--gap-bottom:calc(88px + var(--tabs))}
 .hidden{display:none!important}
-.hw{background:#fff;padding:12px 16px 14px;border-bottom:1px solid #ECECEC;position:sticky;top:0;z-index:5}
+.hw{background:#fff;padding:calc(12px + var(--safe-top)) 16px 14px;border-bottom:1px solid #ECECEC;position:sticky;top:0;z-index:5}
 .brand{display:flex;justify-content:space-between;align-items:center}
 .logo{font-size:22px;font-weight:700;color:#E30613;letter-spacing:.4px}
 .loc{font-size:13px;color:#7A7A7A}
-.hd{background:#E30613;color:#fff;padding:13px 16px;font-size:16px;font-weight:500;display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:5}
+.hd{background:#E30613;color:#fff;padding:calc(13px + var(--safe-top)) 16px 13px;font-size:16px;font-weight:500;display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:5}
 .hd i{font-size:21px;padding:8px;margin:-8px;cursor:pointer}
-.wrap{padding:14px 16px calc(96px + var(--safe))}
+.wrap{padding:14px 16px calc(var(--gap-bottom) + var(--safe-bot))}
 h2{font-size:19px;font-weight:600;margin:0 0 12px}
-#list-title{scroll-margin-top:74px}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
-.cov{background:#fff;border-radius:14px;height:150px;position:relative;overflow:hidden;padding:10px;display:flex;flex-direction:column;justify-content:flex-end}
-.cov img{position:absolute;top:8px;left:8px;right:8px;height:98px;width:calc(100% - 16px);object-fit:contain}
-.cov span.t{font-size:14px;font-weight:600;line-height:1.25;position:relative;z-index:2}
-.cov span.n{position:absolute;top:10px;right:12px;font-size:11px;color:#A8A8A8;z-index:2}
-.dash{width:26px;height:4px;background:#E30613;border-radius:2px;margin-top:6px;position:relative;z-index:2}
+/* лента категорий: занимает одну строку вместо половины экрана */
+.chips{display:flex;gap:8px;overflow-x:auto;padding:10px 16px;background:#fff;border-bottom:1px solid #ECECEC;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chips:empty{display:none}   /* каталог не загрузился — пустая белая полоса не нужна */
+.chip{flex:none;display:flex;align-items:center;gap:8px;padding:5px 14px 5px 5px;border-radius:22px;background:#F3F3F3;font-size:13px;white-space:nowrap;color:#333;user-select:none;-webkit-tap-highlight-color:transparent}
+.chip.on{background:#E30613;color:#fff}
+.chip:active{opacity:.6}
+.chip img{width:30px;height:30px;border-radius:50%;object-fit:contain;background:#fff}
+.chip.plain{padding-left:15px;padding-right:15px}
 .card{background:#fff;border-radius:14px;padding:13px;margin-bottom:10px}
 .pcard{background:#fff;border-radius:14px;padding:9px;display:flex;flex-direction:column}
 .ph{background:#fff;border-radius:10px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;color:#C8C8C8}
@@ -42,8 +59,16 @@ h2{font-size:19px;font-weight:600;margin:0 0 12px}
 .btn{width:100%;background:#E30613;color:#fff;border:none;border-radius:30px;padding:15px;font-size:15px;font-weight:500;font-family:inherit}
 .btn:active{background:#C1050F}
 .btn:disabled{opacity:.5}
-.bar{position:fixed;left:0;right:0;bottom:0;z-index:10;background:#E30613;color:#fff;padding:12px 16px calc(12px + var(--safe));display:flex;justify-content:space-between;align-items:center}
-.ft{position:fixed;left:0;right:0;bottom:0;z-index:20;background:#fff;border-top:1px solid #E8E8E8;padding:12px 16px calc(12px + var(--safe))}
+.ft{position:fixed;left:0;right:0;bottom:0;z-index:20;background:#fff;border-top:1px solid #E8E8E8;padding:12px calc(16px + var(--safe-r)) calc(12px + var(--safe-bot)) calc(16px + var(--safe-l))}
+/* когда снизу меню, кнопка действия встаёт над ним, а отступ на жест уже учтён там */
+body.tabs-on .ft{bottom:calc(var(--tabs) + var(--safe-bot));padding-bottom:12px}
+/* высота задана жёстко: от неё считаются отступы содержимого, и расходиться им нельзя */
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:30;height:calc(var(--tabs) + var(--safe-bot));background:#fff;border-top:1px solid #ECECEC;display:flex;padding:0 var(--safe-r) var(--safe-bot) var(--safe-l)}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:#9A9A9A;font-size:11px;position:relative;user-select:none;-webkit-tap-highlight-color:transparent}
+.tab.on{color:#E30613}
+.tab:active{opacity:.55}
+.tab i{font-size:22px}
+.badge{position:absolute;top:3px;left:50%;margin-left:4px;min-width:17px;height:17px;padding:0 5px;border-radius:9px;background:#E30613;color:#fff;font-size:10px;line-height:17px;text-align:center}
 .msg{text-align:center;color:#7A7A7A;padding:40px 20px;line-height:1.6}
 .inp{width:100%;background:#fff;border:1px solid #E8E8E8;border-radius:12px;padding:13px;font-size:15px;font-family:inherit;color:#111;margin:6px 0 12px}
 .inp:focus{outline:none;border-color:#E30613}
@@ -63,16 +88,11 @@ h2{font-size:19px;font-weight:600;margin:0 0 12px}
   <div class="hw">
     <div class="brand">
       <div class="logo">ROZMART</div>
-      <div style="display:flex;align-items:center;gap:15px">
-        <div class="loc"><i class="ti ti-map-pin" style="color:#E30613"></i> Ташкент</div>
-        <i class="ti ti-receipt hidden" id="my-orders"
-           style="font-size:23px;color:#E30613;padding:7px;margin:-7px"></i>
-      </div>
+      <div class="loc"><i class="ti ti-map-pin" style="color:#E30613"></i> Ташкент</div>
     </div>
   </div>
+  <div class="chips" id="categories"></div>
   <div class="wrap">
-    <h2>Категории</h2>
-    <div class="grid" id="categories" style="margin-bottom:20px"></div>
     <div class="row" style="margin-bottom:12px">
       <h2 id="list-title" style="margin:0">Все товары</h2>
       <span class="mut" id="list-count"></span>
@@ -88,7 +108,7 @@ h2{font-size:19px;font-weight:600;margin:0 0 12px}
 </div>
 
 <div id="screen-cart" class="hidden">
-  <div class="hd"><i class="ti ti-chevron-left" data-go="catalog"></i><span>Корзина</span></div>
+  <div class="hd"><span>Корзина</span></div>
   <div class="wrap" id="cart-body"></div>
   <div class="ft"><button class="btn" id="to-checkout">Оформить заказ</button></div>
 </div>
@@ -120,21 +140,25 @@ h2{font-size:19px;font-weight:600;margin:0 0 12px}
 </div>
 
 <div id="screen-orders" class="hidden">
-  <div class="hd"><i class="ti ti-chevron-left" data-go="catalog"></i><span>Мои заказы</span></div>
+  <div class="hd"><span>Мои заказы</span></div>
   <div class="wrap" id="orders-body"></div>
 </div>
 
 <div id="screen-done" class="hidden">
-  <div class="wrap" id="done-body" style="padding-top:40px"></div>
+  <!-- единственный экран без шапки: верхний отступ полного экрана считаем сами -->
+  <div class="wrap" id="done-body" style="padding-top:calc(40px + var(--safe-top))"></div>
   <div class="ft"><button class="btn" data-go="catalog">Вернуться в каталог</button></div>
 </div>
 
-<div class="bar hidden" id="cart-bar" data-go="cart">
-  <div>
-    <div style="font-size:11px;opacity:.85" id="cart-count"></div>
-    <div style="font-size:15px;font-weight:600" id="cart-sum"></div>
+<div class="tabs hidden" id="tabs">
+  <div class="tab" data-tab="catalog"><i class="ti ti-building-store"></i><span>Каталог</span></div>
+  <div class="tab" data-tab="cart">
+    <i class="ti ti-shopping-cart"></i><span>Корзина</span>
+    <span class="badge hidden" id="tab-count"></span>
   </div>
-  <div style="font-size:14px">Корзина <i class="ti ti-arrow-right"></i></div>
+  <div class="tab hidden" data-tab="orders" id="tab-orders">
+    <i class="ti ti-receipt"></i><span>Заказы</span>
+  </div>
 </div>
 
 <script src="/static/app.js"></script>

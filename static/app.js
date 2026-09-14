@@ -106,20 +106,23 @@ async function loadCatalog() {
     ]);
     state.categories = categories;
 
-    el("categories").innerHTML = categories
-      .map((c) => `
-        <div class="cov" data-category="${c.id}">
-          ${c.photo ? `<img src="${esc(c.photo)}" alt="">` : ""}
-          <span class="n">${c.product_count}</span>
-          <span class="t">${esc(c.name)}</span>
-          <div class="dash"></div>
-        </div>`)
-      .join("");
-
+    renderCategories();
     renderProducts(products);
   } catch (error) {
     fail("Не удалось загрузить каталог. Проверьте подключение к интернету.", error);
   }
+}
+
+/** Лента категорий. Выбранная подсвечена, «Все» сбрасывает отбор. */
+function renderCategories() {
+  const all = `<span class="chip plain ${state.categoryId === null ? "on" : ""}"
+      data-category="0">Все</span>`;
+  el("categories").innerHTML = all + state.categories
+    .map((c) => `
+      <span class="chip ${c.id === state.categoryId ? "on" : ""}" data-category="${c.id}">
+        ${c.photo ? `<img src="${esc(c.photo)}" alt="">` : ""}${esc(c.name)}
+      </span>`)
+    .join("");
 }
 
 function renderProducts(products) {
@@ -157,7 +160,8 @@ function plural(n, one = "товар", few = "товара", many = "товар�
 }
 
 async function selectCategory(categoryId) {
-  const next = state.categoryId === categoryId ? null : categoryId;
+  // 0 — чип «Все»; повторное нажатие на выбранную категорию тоже сбрасывает отбор
+  const next = categoryId === 0 || state.categoryId === categoryId ? null : categoryId;
   const my = ++requestId;
   try {
     const products = await api(`/api/products${next ? `?category_id=${next}` : ""}`);
@@ -165,8 +169,9 @@ async function selectCategory(categoryId) {
     state.categoryId = next;
     const category = state.categories.find((c) => c.id === next);
     el("list-title").textContent = category ? category.name : "Все товары";
+    renderCategories();
     renderProducts(products);
-    el("list-title").scrollIntoView({ behavior: "smooth", block: "start" });
+    window.scrollTo({ top: 0, behavior: "smooth" });   // чтобы лента осталась на виду
   } catch (error) {
     if (my === requestId) fail("Не удалось загрузить товары категории.", error);
   }
@@ -288,6 +293,7 @@ function addToCart() {
  *  показом сверяем цены и наличие, чтобы покупатель видел то же, что и сервер. */
 async function refreshCart() {
   if (!state.cart.length) return;
+  const my = ++requestId;
   const ids = [...new Set(state.cart.map((i) => i.productId))];
   let loaded;
   try {
@@ -299,6 +305,7 @@ async function refreshCart() {
     console.error(error);   // связи нет — показываем как есть, сервер всё равно пересчитает
     return;
   }
+  if (my !== requestId) return;   // пока сверяли, корзину открыли заново или ушли с неё
 
   const actual = new Map();
   for (const product of loaded.filter(Boolean)) {
@@ -324,14 +331,14 @@ async function refreshCart() {
 const goodsTotal = () => state.cart.reduce((sum, i) => sum + i.price * i.qty, 0);
 const cartCount = () => state.cart.reduce((sum, i) => sum + i.qty, 0);
 
-function renderCartBar() {
+function renderCartBadge() {
   const count = cartCount();
-  el("cart-bar").classList.toggle("hidden", count === 0);
-  el("cart-count").textContent = `${count} ${plural(count)}`;
-  el("cart-sum").textContent = money(goodsTotal());
+  el("tab-count").textContent = count;
+  el("tab-count").classList.toggle("hidden", count === 0);
 }
 
 function renderCart() {
+  renderCartBadge();   // счётчик на вкладке показывает то же число, что и этот экран
   const notice = state.cartNotice
     ? `<div class="err" style="margin:0 0 10px">${esc(state.cartNotice)}</div>`
     : "";
@@ -473,7 +480,7 @@ async function submitOrder() {
     state.cart = [];
     state.scrollY = 0;   // «Вернуться в каталог» — сверху, а не там, где смотрели товар
     saveCart();
-    renderCartBar();
+    renderCartBadge();
     if (!body) {
       // заказ создан, но ответ пришёл не в том виде — второй раз отправлять нельзя
       throw Object.assign(new Error("Заказ отправлен. Найдите его в «Моих заказах»."),
@@ -561,11 +568,36 @@ function orderCard(order) {
 
 const SCREENS = ["catalog", "product", "cart", "checkout", "done", "orders"];
 
+// корневые разделы — те, между которыми переключает нижнее меню. Остальные
+// экраны открываются «поверх» и меню не показывают: у них своя кнопка внизу
+const ROOT_SCREENS = ["catalog", "cart", "orders"];
+const SCREENS_WITH_BUTTON = ["product", "cart", "checkout", "done"];
+
+// куда ведёт кнопка «назад» Telegram с каждого некорневого экрана
+const BACK_TO = { product: "catalog", checkout: "cart", done: "catalog" };
+
 function show(name) {
+  // незавершённый запрос не должен подменить экран: пока грузилась карточка
+  // товара, покупатель мог уже уйти в корзину
+  requestId += 1;
+  state.screen = name;
   for (const s of SCREENS) el(`screen-${s}`).classList.toggle("hidden", s !== name);
-  // панель корзины фиксированная и перекрыла бы кнопки на других экранах
-  el("cart-bar").classList.add("hidden");
-  if (name === "catalog") renderCartBar();
+
+  const root = ROOT_SCREENS.includes(name);
+  const tg = window.Telegram && window.Telegram.WebApp;
+  // без неё аппаратная «назад» на Android закрывает приложение целиком —
+  // например, с наполовину заполненной формы оформления
+  if (tg && tg.BackButton) (root ? tg.BackButton.hide : tg.BackButton.show).call(tg.BackButton);
+  el("tabs").classList.toggle("hidden", !root);
+  // от этих классов зависит нижний отступ содержимого: под меню, под кнопку
+  // или под то и другое сразу — иначе последняя строка уезжает под них
+  document.body.classList.toggle("tabs-on", root);
+  document.body.classList.toggle("action-on", SCREENS_WITH_BUTTON.includes(name));
+  for (const tab of document.querySelectorAll("[data-tab]")) {
+    tab.classList.toggle("on", tab.dataset.tab === name);
+  }
+
+  renderCartBadge();
   window.scrollTo(0, name === "catalog" ? state.scrollY : 0);
 }
 
@@ -605,7 +637,13 @@ document.addEventListener("click", (event) => {
   }
   if (event.target.closest("#back")) return show("catalog");
   if (event.target.closest("#add")) return addToCart();
-  if (event.target.closest("#my-orders")) return openOrders();
+
+  const tab = event.target.closest("[data-tab]");
+  if (tab) {
+    if (tab.dataset.tab === "cart") return openCart();
+    if (tab.dataset.tab === "orders") return openOrders();
+    return show("catalog");
+  }
 
   // корзина
   const minus = event.target.closest("[data-cart-minus]");
@@ -669,12 +707,24 @@ function setupTelegram() {
     tg.setHeaderColor("#E30613");
     tg.setBackgroundColor("#F5F5F5");
     if (tg.disableVerticalSwipes) tg.disableVerticalSwipes();
+    if (tg.setBottomBarColor) tg.setBottomBarColor("#ffffff");
+    if (tg.BackButton) {
+      tg.BackButton.onClick(() => {
+        const back = BACK_TO[state.screen] || "catalog";
+        return back === "cart" ? openCart() : show(back);
+      });
+    }
+    // на весь экран — только с Bot API 8.0. На клиенте постарше просто
+    // останется обычная шторка: отступы считаются по тем же переменным
+    if (tg.isVersionAtLeast && tg.isVersionAtLeast("8.0") && tg.requestFullscreen) {
+      tg.requestFullscreen();
+    }
   } catch (error) {
     console.error(error);   // старый клиент не знает часть команд — не повод падать
   }
 
   if (!tg.initData) return;   // открыто в браузере: заказов у нас на него нет
-  el("my-orders").classList.remove("hidden");
+  el("tab-orders").classList.remove("hidden");
   // подставляем имя, чтобы не набирать его руками. Телефона Telegram не даёт
   const user = tg.initDataUnsafe && tg.initDataUnsafe.user;
   if (user) {
@@ -685,6 +735,7 @@ function setupTelegram() {
 async function start() {
   setupTelegram();
   loadSavedCart();
+  show("catalog");
   // стоимость доставки грузим вместе с каталогом: без неё итог в корзине
   // разошёлся бы с расчётом сервера
   try {
@@ -693,9 +744,7 @@ async function start() {
     await loadCatalog();
   } catch (error) {
     fail("Не удалось загрузить каталог. Проверьте подключение к интернету.", error);
-    return;
   }
-  renderCartBar();
 }
 
 start();
