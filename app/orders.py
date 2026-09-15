@@ -1,13 +1,14 @@
 """Оформление заказа."""
 from datetime import timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
 from app.models import Order, OrderItem, Variant
+from app.profile import save_customer
 from app.schemas import OrderIn, OrderItemOut, OrderOut
 from app.telegram import TelegramUser, buyer, require_user
 
@@ -151,6 +152,12 @@ def create_order(
             detail="Цены изменились. Проверьте корзину и подтвердите заказ заново.",
         )
 
+    # запоминаем покупателя, чтобы в следующий раз не набирал то же самое.
+    # Одной транзакцией с заказом: заказ без согласия на обработку не создаётся.
+    # Уже сохранённый профиль заказ не трогает — его меняют только вручную
+    if user:
+        save_customer(db, user.id, data, update_existing=False)
+
     db.add(order)
     try:
         db.flush()                               # получаем id, чтобы собрать номер
@@ -168,10 +175,13 @@ def create_order(
 
 @router.get("/my-orders", response_model=list[OrderOut])
 def my_orders(
+    response: Response,
     db: Session = Depends(get_db),
     user: TelegramUser = Depends(require_user),
 ):
     """Заказы этого покупателя, свежие сверху."""
+    # ответ зависит от заголовка с подписью, промежуточные прокси его не учтут
+    response.headers["Cache-Control"] = "no-store"
     orders = db.scalars(
         select(Order)
         .where(Order.telegram_id == user.id)

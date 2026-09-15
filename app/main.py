@@ -8,6 +8,8 @@ from fastapi.staticfiles import StaticFiles
 from app.catalog import router as catalog_router
 from app.db import init_db
 from app.orders import router as orders_router
+from app.profile import router as profile_router
+from app.seed import seed_catalog
 from app.telegram import check_configuration
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
@@ -18,6 +20,7 @@ async def lifespan(app: FastAPI):
     check_configuration()
     STATIC_DIR.mkdir(parents=True, exist_ok=True)
     init_db()
+    seed_catalog()
     yield
 
 
@@ -27,6 +30,7 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR, check_dir=False), name="s
 
 app.include_router(catalog_router)
 app.include_router(orders_router)
+app.include_router(profile_router)
 
 
 @app.get("/", include_in_schema=False)

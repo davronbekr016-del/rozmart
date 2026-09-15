@@ -11,7 +11,9 @@ Telegram Mini App для сети магазинов ROZMART: каталог п�
 | Модуль | Что умеет | Неочевидное |
 |---|---|---|
 | `app/db.py` | Подключение к базе, `get_db`, `init_db` | Для SQLite включает `foreign_keys`, `WAL` и `busy_timeout` — без них запись заказа блокирует чтение каталога |
-| `app/models.py` | `Category` → `Product` → `Variant`, `Order` → `OrderItem` | `Variant.price` может быть `NULL` (прайса ещё нет), но не `0`. `Product.is_active` по умолчанию `false` (BR-34). `Order.client_key` — ключ попытки оформления, `Order.telegram_id` — чей заказ |
+| `app/models.py` | `Category` → `Product` → `Variant`, `Order` → `OrderItem`, `Customer` | `Variant.price` может быть `NULL` (прайса ещё нет), но не `0`. `Product.is_active` по умолчанию `false` (BR-34). `Order.client_key` — ключ попытки оформления, `Order.telegram_id` — чей заказ |
+| `app/profile.py` | `GET/PUT/DELETE /api/profile`, `save_customer` | Записи о покупателе без согласия не бывает: `consent_at` обязателен. Заказ профиль не переписывает (`update_existing=False`) — разовая доставка на чужой адрес не должна менять сохранённое. Удаление профиля не трогает оформленные заказы |
+| `app/seed.py` | Наливает каталог из `data/catalog.json`, если товаров нет | На сервере база создаётся пустой: сам файл базы в репозиторий не едет |
 | `app/telegram.py` | Проверка подписи Telegram, зависимости `current_user` / `require_user` / `buyer` | Без `BOT_TOKEN` приложение не стартует — тихая работа без проверки входа опаснее падения. Для разработки без Telegram: `TELEGRAM_AUTH_DISABLED=1`. Подпись живёт сутки |
 | `app/schemas.py` | Что API отдаёт клиенту и что принимает | Служебных полей REGOS здесь нет намеренно (BR-36). Телефон нормализуется к `+998…` |
 | `app/catalog.py` | `GET /api/categories`, `/api/products`, `/api/products/{id}` | Товар виден, только если активны и он, и хотя бы одна фасовка с ценой. Цена «от» — по видимым фасовкам (BR-37) |
@@ -70,5 +72,13 @@ set DATABASE_URL=postgresql+psycopg://user:pass@host/rozmart
 Каталог после этого заливается заново:
 
 ```
-.venv\Scripts\python.exe scripts\import_catalog.py
+.venv\Scripts\python.exe -m scripts.import_catalog
+.venv\Scripts\python.exe -m scripts.export_catalog
 ```
+
+## Каталог на сервере
+
+Сам файл базы в репозиторий **не едет** — в нём телефоны и адреса покупателей,
+а из истории git их потом не вычистить. На сервере база создаётся пустой и
+наполняется из `data/catalog.json`: его готовит `scripts/export_catalog.py`
+после каждой заливки каталога. Изменения цен при этом видны в истории.

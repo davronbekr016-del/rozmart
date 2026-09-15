@@ -61,6 +61,25 @@ class Variant(Base):
     product: Mapped["Product"] = relationship(back_populates="variants")
 
 
+class Customer(Base):
+    """Покупатель. Заводится при первом заказе, чтобы телефон и адрес
+    не приходилось набирать заново каждый раз."""
+
+    __tablename__ = "customers"
+
+    # ключ — аккаунт Telegram, своих идентификаторов не заводим
+    telegram_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    name: Mapped[str] = mapped_column(String(200))
+    phone: Mapped[str] = mapped_column(String(30))
+    address: Mapped[str] = mapped_column(Text)
+    # FR-1.13: согласие на обработку данных берётся один раз и фиксируется.
+    # Поле обязательное — значит записи о покупателе без согласия не бывает
+    consent_at: Mapped[datetime] = mapped_column(DateTime)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+
 class Order(Base):
     """Заказ клиента. Статусы — по машине состояний из спецификации, раздел 3.2."""
 

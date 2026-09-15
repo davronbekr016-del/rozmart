@@ -56,19 +56,14 @@ class OrderItemIn(BaseModel):
     quantity: int = Field(ge=1, le=99)
 
 
-class OrderIn(BaseModel):
+class ContactIn(BaseModel):
+    """Данные покупателя. Одни и те же при заказе и при правке профиля."""
+
     customer_name: str = Field(min_length=2, max_length=200)
     phone: str = Field(min_length=9, max_length=30)
     address: str = Field(min_length=5, max_length=500)
-    delivery_slot: DeliverySlot
-    payment_method: PaymentMethod
-    comment: str | None = Field(default=None, max_length=500)
-    items: list[OrderItemIn] = Field(min_length=1, max_length=50)
-    # ключ попытки оформления: повтор с тем же ключом вернёт уже созданный заказ
-    client_key: str | None = Field(default=None, min_length=8, max_length=64)
-    # итог, который видел покупатель. Разошёлся с расчётом сервера — не создаём
-    # заказ молча по другой цене, а просим обновить корзину
-    expected_total: int | None = Field(default=None, ge=0)
+    # согласие на обработку данных. Спрашивается один раз, дальше уже дано
+    consent: bool = False
 
     @field_validator("phone")
     @classmethod
@@ -78,10 +73,30 @@ class OrderIn(BaseModel):
             raise ValueError("Номер должен быть узбекским: +998 и 9 цифр")
         return f"+{digits}"
 
-    @field_validator("customer_name", "address")
+    # before: иначе длину проверят до обрезки и строка из одних пробелов пройдёт
+    @field_validator("customer_name", "address", mode="before")
     @classmethod
-    def strip_text(cls, value: str) -> str:
-        return value.strip()
+    def strip_text(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+class ProfileOut(BaseModel):
+    name: str
+    phone: str
+    address: str
+    consent: bool
+
+
+class OrderIn(ContactIn):
+    delivery_slot: DeliverySlot
+    payment_method: PaymentMethod
+    comment: str | None = Field(default=None, max_length=500)
+    items: list[OrderItemIn] = Field(min_length=1, max_length=50)
+    # ключ попытки оформления: повтор с тем же ключом вернёт уже созданный заказ
+    client_key: str | None = Field(default=None, min_length=8, max_length=64)
+    # итог, который видел покупатель. Разошёлся с расчётом сервера — не создаём
+    # заказ молча по другой цене, а просим обновить корзину
+    expected_total: int | None = Field(default=None, ge=0)
 
 
 class OrderItemOut(BaseModel):

@@ -1,0 +1,953 @@
+{
+ "categories": [
+  {
+   "id": 1,
+   "name": "Копчёные колбасы",
+   "sort_order": 0
+  },
+  {
+   "id": 2,
+   "name": "Варёные колбасы",
+   "sort_order": 1
+  },
+  {
+   "id": 3,
+   "name": "Сосиски",
+   "sort_order": 2
+  },
+  {
+   "id": 4,
+   "name": "Деликатесы",
+   "sort_order": 3
+  }
+ ],
+ "products": [
+  {
+   "id": 1,
+   "category_id": 2,
+   "name": "Экстра варёная",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "1.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 15,
+     "external_code": "003098",
+     "weight": "400 г",
+     "weight_grams": 400,
+     "price": null,
+     "barcode": null,
+     "is_active": false
+    },
+    {
+     "id": 2,
+     "external_code": "005035",
+     "weight": "455 г",
+     "weight_grams": 455,
+     "price": 49990,
+     "barcode": null,
+     "is_active": true
+    },
+    {
+     "id": 11,
+     "external_code": "003099",
+     "weight": "700 г",
+     "weight_grams": 700,
+     "price": 76990,
+     "barcode": null,
+     "is_active": true
+    },
+    {
+     "id": 1,
+     "external_code": "001049",
+     "weight": "855 г",
+     "weight_grams": 855,
+     "price": 97990,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "category_id": 2,
+   "name": "Докторская особая варёная",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": null,
+   "is_active": false,
+   "variants": [
+    {
+     "id": 4,
+     "external_code": "002910",
+     "weight": "455 г",
+     "weight_grams": 455,
+     "price": 39990,
+     "barcode": null,
+     "is_active": true
+    },
+    {
+     "id": 3,
+     "external_code": "002634",
+     "weight": "855 г",
+     "weight_grams": 855,
+     "price": 64483,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "category_id": 2,
+   "name": "Докторская варёная",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "3.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 16,
+     "external_code": "003100",
+     "weight": "400 г",
+     "weight_grams": 400,
+     "price": null,
+     "barcode": null,
+     "is_active": false
+    },
+    {
+     "id": 8,
+     "external_code": "004829",
+     "weight": "455 г",
+     "weight_grams": 455,
+     "price": 48990,
+     "barcode": null,
+     "is_active": true
+    },
+    {
+     "id": 5,
+     "external_code": "003101",
+     "weight": "700 г",
+     "weight_grams": 700,
+     "price": 74990,
+     "barcode": null,
+     "is_active": true
+    },
+    {
+     "id": 10,
+     "external_code": "004805",
+     "weight": "855 г",
+     "weight_grams": 855,
+     "price": 92790,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "category_id": 2,
+   "name": "Телячья варёная",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "4.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 17,
+     "external_code": "003102",
+     "weight": "400 г",
+     "weight_grams": 400,
+     "price": null,
+     "barcode": null,
+     "is_active": false
+    },
+    {
+     "id": 14,
+     "external_code": "000860",
+     "weight": "455 г",
+     "weight_grams": 455,
+     "price": null,
+     "barcode": null,
+     "is_active": false
+    },
+    {
+     "id": 9,
+     "external_code": "003103",
+     "weight": "700 г",
+     "weight_grams": 700,
+     "price": 74990,
+     "barcode": null,
+     "is_active": true
+    },
+    {
+     "id": 6,
+     "external_code": "005827",
+     "weight": "855 г",
+     "weight_grams": 855,
+     "price": 95990,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "category_id": 2,
+   "name": "Молочные варёная",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "5.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 7,
+     "external_code": "000861",
+     "weight": "455 г",
+     "weight_grams": 455,
+     "price": 48990,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "category_id": 2,
+   "name": "Молочная варёная",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "6.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 12,
+     "external_code": "003105",
+     "weight": "700 г",
+     "weight_grams": 700,
+     "price": 74990,
+     "barcode": null,
+     "is_active": true
+    },
+    {
+     "id": 13,
+     "external_code": "006336",
+     "weight": "855 г",
+     "weight_grams": 855,
+     "price": 95990,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "category_id": 2,
+   "name": "Докторская особая Асл Фарход в вакууме",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": null,
+   "is_active": false,
+   "variants": [
+    {
+     "id": 18,
+     "external_code": "007937",
+     "weight": "855 г",
+     "weight_grams": 855,
+     "price": null,
+     "barcode": null,
+     "is_active": false
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "category_id": 4,
+   "name": "Куриный казы деликатес в вакууме",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": null,
+   "is_active": false,
+   "variants": [
+    {
+     "id": 19,
+     "external_code": "004866",
+     "weight": "400 г",
+     "weight_grams": 400,
+     "price": 47990,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "category_id": 4,
+   "name": "Выдержка Аристократ в вакууме",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": null,
+   "is_active": false,
+   "variants": [
+    {
+     "id": 20,
+     "external_code": "001628",
+     "weight": "340 г",
+     "weight_grams": 340,
+     "price": 88990,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "category_id": 4,
+   "name": "Выдержка Мерос в вакууме",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": null,
+   "is_active": false,
+   "variants": [
+    {
+     "id": 21,
+     "external_code": "005091",
+     "weight": "340 г",
+     "weight_grams": 340,
+     "price": 76990,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "category_id": 4,
+   "name": "Барбекю Говяжьи",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "11.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 25,
+     "external_code": "000957",
+     "weight": "300 г",
+     "weight_grams": 300,
+     "price": null,
+     "barcode": null,
+     "is_active": false
+    },
+    {
+     "id": 22,
+     "external_code": "000958",
+     "weight": "600 г",
+     "weight_grams": 600,
+     "price": 103500,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "category_id": 4,
+   "name": "Барбекю Куриные",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "12.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 23,
+     "external_code": "000959",
+     "weight": "300 г",
+     "weight_grams": 300,
+     "price": 39000,
+     "barcode": null,
+     "is_active": true
+    },
+    {
+     "id": 26,
+     "external_code": "000960",
+     "weight": "600 г",
+     "weight_grams": 600,
+     "price": null,
+     "barcode": null,
+     "is_active": false
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "category_id": 4,
+   "name": "Барбекю Бараньи",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "13.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 28,
+     "external_code": "003106",
+     "weight": "300 г",
+     "weight_grams": 300,
+     "price": null,
+     "barcode": null,
+     "is_active": false
+    },
+    {
+     "id": 24,
+     "external_code": "000956",
+     "weight": "600 г",
+     "weight_grams": 600,
+     "price": null,
+     "barcode": null,
+     "is_active": false
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "category_id": 4,
+   "name": "Барбекю Сырные",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "14.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 29,
+     "external_code": "003107",
+     "weight": "300 г",
+     "weight_grams": 300,
+     "price": null,
+     "barcode": null,
+     "is_active": false
+    },
+    {
+     "id": 27,
+     "external_code": "000961",
+     "weight": "600 г",
+     "weight_grams": 600,
+     "price": null,
+     "barcode": null,
+     "is_active": false
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "category_id": 1,
+   "name": "Асл Фарход копчёная в вакууме",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "15.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 30,
+     "external_code": "000967",
+     "weight": "200 г",
+     "weight_grams": 200,
+     "price": 24990,
+     "barcode": null,
+     "is_active": true
+    },
+    {
+     "id": 37,
+     "external_code": "007915",
+     "weight": "350 г",
+     "weight_grams": 350,
+     "price": null,
+     "barcode": null,
+     "is_active": false
+    },
+    {
+     "id": 32,
+     "external_code": "000969",
+     "weight": "500 г",
+     "weight_grams": 500,
+     "price": 62990,
+     "barcode": null,
+     "is_active": true
+    },
+    {
+     "id": 34,
+     "external_code": "000972",
+     "weight": "600 г",
+     "weight_grams": 600,
+     "price": 75490,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 16,
+   "category_id": 1,
+   "name": "Асл Фарход копчёная",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "16.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 33,
+     "external_code": "000974",
+     "weight": "500 г",
+     "weight_grams": 500,
+     "price": 59990,
+     "barcode": null,
+     "is_active": true
+    },
+    {
+     "id": 31,
+     "external_code": "000975",
+     "weight": "600 г",
+     "weight_grams": 600,
+     "price": 67465,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 17,
+   "category_id": 1,
+   "name": "Выдержка Асл Фарход в вакууме",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": null,
+   "is_active": false,
+   "variants": [
+    {
+     "id": 35,
+     "external_code": "000950",
+     "weight": "300 г",
+     "weight_grams": 300,
+     "price": 79990,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 18,
+   "category_id": 1,
+   "name": "Сервелат копчёная",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "18.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 36,
+     "external_code": "004003",
+     "weight": "600 г",
+     "weight_grams": 600,
+     "price": null,
+     "barcode": null,
+     "is_active": false
+    }
+   ]
+  },
+  {
+   "id": 19,
+   "category_id": 3,
+   "name": "Егерские сосиски",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "19.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 38,
+     "external_code": "000935",
+     "weight": "700 г",
+     "weight_grams": 700,
+     "price": 70490,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 20,
+   "category_id": 3,
+   "name": "Охотничьи классик деликатес",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "20.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 39,
+     "external_code": "000962",
+     "weight": "200 г",
+     "weight_grams": 200,
+     "price": 28990,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 21,
+   "category_id": 3,
+   "name": "Говяжьи сосиски в вакууме",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "21.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 40,
+     "external_code": "000979",
+     "weight": "400 г",
+     "weight_grams": 400,
+     "price": 40990,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 22,
+   "category_id": 3,
+   "name": "Молочные сосиски в вакууме",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "22.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 41,
+     "external_code": "000988",
+     "weight": "400 г",
+     "weight_grams": 400,
+     "price": 40990,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 23,
+   "category_id": 3,
+   "name": "Егерские сосиски в вакууме",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "23.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 42,
+     "external_code": "000982",
+     "weight": "400 г",
+     "weight_grams": 400,
+     "price": 41990,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 24,
+   "category_id": 3,
+   "name": "Молочные сосиски",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "24.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 43,
+     "external_code": "000991",
+     "weight": "700 г",
+     "weight_grams": 700,
+     "price": 70490,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 25,
+   "category_id": 3,
+   "name": "Охотничьи с сыром деликатес",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "25.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 44,
+     "external_code": "000965",
+     "weight": "200 г",
+     "weight_grams": 200,
+     "price": 30990,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 26,
+   "category_id": 3,
+   "name": "Канадские сосиски в вакууме",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "26.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 45,
+     "external_code": "000984",
+     "weight": "400 г",
+     "weight_grams": 400,
+     "price": 36990,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 27,
+   "category_id": 3,
+   "name": "Сырные сосиски",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "27.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 46,
+     "external_code": "000997",
+     "weight": "700 г",
+     "weight_grams": 700,
+     "price": 76990,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 28,
+   "category_id": 3,
+   "name": "Телячьи сосиски в вакууме",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "28.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 47,
+     "external_code": "000938",
+     "weight": "400 г",
+     "weight_grams": 400,
+     "price": 44490,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 29,
+   "category_id": 3,
+   "name": "Охотничьи чили деликатес",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "29.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 48,
+     "external_code": "000964",
+     "weight": "200 г",
+     "weight_grams": 200,
+     "price": 28990,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 30,
+   "category_id": 3,
+   "name": "Детские сосиски",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "30.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 49,
+     "external_code": "000978",
+     "weight": "500 г",
+     "weight_grams": 500,
+     "price": 56990,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 31,
+   "category_id": 3,
+   "name": "Говяжьи сосиски",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "31.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 50,
+     "external_code": "000981",
+     "weight": "700 г",
+     "weight_grams": 700,
+     "price": 71490,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 32,
+   "category_id": 3,
+   "name": "Телячьи сосиски",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "32.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 51,
+     "external_code": "000941",
+     "weight": "700 г",
+     "weight_grams": 700,
+     "price": 76990,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 33,
+   "category_id": 3,
+   "name": "Сардельки сосиски",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": null,
+   "is_active": false,
+   "variants": [
+    {
+     "id": 52,
+     "external_code": "000994",
+     "weight": "600 г",
+     "weight_grams": 600,
+     "price": 69990,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 34,
+   "category_id": 3,
+   "name": "Канадские с сыром сосиски в вакууме",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "34.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 53,
+     "external_code": "005160",
+     "weight": "400 г",
+     "weight_grams": 400,
+     "price": 32990,
+     "barcode": null,
+     "is_active": true
+    }
+   ]
+  },
+  {
+   "id": 35,
+   "category_id": 3,
+   "name": "Сырные сосиски в вакууме",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "35.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 54,
+     "external_code": "000995",
+     "weight": "400 г",
+     "weight_grams": 400,
+     "price": null,
+     "barcode": null,
+     "is_active": false
+    }
+   ]
+  },
+  {
+   "id": 36,
+   "category_id": 3,
+   "name": "Сутлу сосиски",
+   "description": null,
+   "composition": null,
+   "shelf_life": null,
+   "photo": "36.jpg",
+   "is_active": true,
+   "variants": [
+    {
+     "id": 55,
+     "external_code": "006080",
+     "weight": "650 г",
+     "weight_grams": 650,
+     "price": null,
+     "barcode": null,
+     "is_active": false
+    }
+   ]
+  }
+ ]
+}

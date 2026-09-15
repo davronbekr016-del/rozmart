@@ -28,10 +28,19 @@ body.tabs-on.action-on{--gap-bottom:calc(88px + var(--tabs))}
 /* шапка цветная: под ней лежит статус-бар, а часы и заряд система рисует
    белым — на белом фоне они пропадали */
 .hw{background:#E30613;padding:calc(12px + var(--safe-top)) 16px 12px;position:sticky;top:0;z-index:5}
-.brand{display:flex;justify-content:space-between;align-items:center}
-.logo{font-size:21px;font-weight:700;color:#fff;letter-spacing:.4px}
-.loc{font-size:13px;color:rgba(255,255,255,.85)}
-.search{display:flex;align-items:center;gap:9px;margin-top:11px;background:rgba(255,255,255,.17);border-radius:12px;padding:0 12px}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{font-size:17px;font-weight:700;color:#fff;letter-spacing:.4px;flex:none}
+.search{flex:1;display:flex;align-items:center;gap:9px;background:rgba(255,255,255,.17);border-radius:12px;padding:0 12px}
+/* строка адреса: до первого заказа зовёт его указать, потом показывает свой */
+.addr{display:flex;align-items:center;gap:12px;background:#fff;padding:11px 16px;border-bottom:1px solid #ECECEC}
+.addr .pin{width:36px;height:36px;border-radius:50%;background:#F3F3F3;display:flex;align-items:center;justify-content:center;color:#E30613;font-size:19px;flex:none}
+.addr .txt{flex:1;min-width:0}
+.addr .t{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.addr .s{font-size:11.5px;color:#8A8A8A;margin-top:1px}
+.addr .go{color:#C4C4C4;font-size:18px}
+.agree{display:flex;align-items:flex-start;gap:10px;padding:12px 2px;font-size:12.5px;line-height:1.45;color:#555}
+.agree input{width:19px;height:19px;flex:none;margin:0;accent-color:#E30613}
+.agree.bad{color:#B3050F}
 .search i{font-size:19px;color:rgba(255,255,255,.75)}
 /* 16px обязательны: на меньшем шрифте iOS зумит страницу при касании поля */
 .search input{flex:1;min-width:0;background:none;border:none;outline:none;color:#fff;font-size:16px;font-family:inherit;padding:11px 0}
@@ -96,13 +105,20 @@ body.tabs-on .ft{bottom:calc(var(--tabs) + var(--safe-bot));padding-bottom:12px}
   <div class="hw">
     <div class="brand">
       <div class="logo">ROZMART</div>
-      <div class="loc"><i class="ti ti-map-pin"></i> Ташкент</div>
+      <div class="search">
+        <i class="ti ti-search"></i>
+        <input id="q" placeholder="Поиск по каталогу" autocomplete="off" enterkeyhint="search">
+        <i class="ti ti-x clear hidden" id="q-clear"></i>
+      </div>
     </div>
-    <div class="search">
-      <i class="ti ti-search"></i>
-      <input id="q" placeholder="Поиск по каталогу" autocomplete="off" enterkeyhint="search">
-      <i class="ti ti-x clear hidden" id="q-clear"></i>
+  </div>
+  <div class="addr hidden" id="addr" data-tab="profile">
+    <span class="pin"><i class="ti ti-map-pin"></i></span>
+    <div class="txt">
+      <div class="t" id="addr-t">Укажите адрес</div>
+      <div class="s" id="addr-s">Доставим за 60–90 минут</div>
     </div>
+    <i class="ti ti-chevron-right go"></i>
   </div>
   <div class="chips" id="categories"></div>
   <div class="wrap">
@@ -147,9 +163,40 @@ body.tabs-on .ft{bottom:calc(var(--tabs) + var(--safe-bot));padding-bottom:12px}
     <div id="payments"></div>
 
     <div class="card" id="checkout-total"></div>
+    <label class="agree hidden" id="agree-box">
+      <input type="checkbox" id="agree">
+      <span>Согласен на обработку моих данных — имени, телефона и адреса — для доставки заказа</span>
+    </label>
     <div class="err hidden" id="checkout-error"></div>
   </div>
   <div class="ft"><button class="btn" id="submit-order">Подтвердить заказ</button></div>
+</div>
+
+<div id="screen-profile" class="hidden">
+  <div class="hd"><span>Профиль</span></div>
+  <div class="wrap">
+    <div class="card">
+      <label class="mut" for="p-name">Имя</label>
+      <input class="inp" id="p-name" placeholder="Как к вам обращаться">
+      <label class="mut" for="p-phone">Номер телефона</label>
+      <input class="inp" id="p-phone" inputmode="tel" placeholder="+998 XX XXX XX XX">
+      <label class="mut" for="p-address">Адрес доставки</label>
+      <input class="inp" id="p-address" placeholder="Район, улица, дом, квартира">
+    </div>
+    <label class="agree hidden" id="p-agree-box">
+      <input type="checkbox" id="p-agree">
+      <span>Согласен на обработку моих данных — имени, телефона и адреса — для доставки заказа</span>
+    </label>
+    <div class="err hidden" id="profile-error"></div>
+    <div class="mut" style="font-size:12px;text-align:center;line-height:1.6;margin-top:14px">
+      Эти данные подставятся в следующий заказ. Уже оформленные не меняются.
+    </div>
+    <div class="hidden" id="forget"
+         style="text-align:center;color:#B3050F;font-size:13px;padding:18px 0">
+      Удалить мои данные
+    </div>
+  </div>
+  <div class="ft"><button class="btn" id="save-profile">Сохранить</button></div>
 </div>
 
 <div id="screen-orders" class="hidden">
@@ -171,6 +218,9 @@ body.tabs-on .ft{bottom:calc(var(--tabs) + var(--safe-bot));padding-bottom:12px}
   </div>
   <div class="tab hidden" data-tab="orders" id="tab-orders">
     <i class="ti ti-receipt"></i><span>Заказы</span>
+  </div>
+  <div class="tab hidden" data-tab="profile" id="tab-profile">
+    <i class="ti ti-user"></i><span>Профиль</span>
   </div>
 </div>
 

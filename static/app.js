@@ -12,6 +12,8 @@ const state = {
   variant: null,      // выбранная фасовка
   qty: 1,
   cart: [],           // {variantId, productId, name, weight, price, qty}
+  profile: null,      // имя, телефон, адрес покупателя; null — вне Telegram
+  savingProfile: false,
   cartNotice: "",     // что изменилось в корзине, пока её не открывали
   clientKey: null,    // ключ попытки оформления, чтобы повтор не создал второй заказ
   scrollY: 0,         // позиция каталога, чтобы вернуть её после карточки
@@ -57,11 +59,21 @@ function tgHeaders() {
   return tg && tg.initData ? { "X-Telegram-Init-Data": tg.initData } : {};
 }
 
-async function api(path) {
-  const response = await fetch(path, { headers: tgHeaders() });
+async function api(path, options = {}) {
+  const response = await fetch(path, {
+    method: options.method || "GET",
+    headers: options.body
+      ? { "Content-Type": "application/json", ...tgHeaders() }
+      : tgHeaders(),
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  if (response.status === 204) return null;   // удаление, отвечать нечем
   if (!response.ok) {
     const error = new Error(`${path} -> ${response.status}`);
     error.status = response.status;   // 404 «товара больше нет» отличаем от обрыва связи
+    // текст сервера показываем только там, где он написан для покупателя
+    const body = response.status < 500 ? await response.json().catch(() => null) : null;
+    error.detail = body && typeof body.detail === "string" ? body.detail : null;
     throw error;
   }
   return response.json();
@@ -459,16 +471,13 @@ async function submitOrder() {
     "f-phone": el("f-phone").value.trim(),
     "f-address": el("f-address").value.trim(),
   };
-  const digits = fields["f-phone"].replace(/\D/g, "");
-  const problems = [];
-  if (fields["f-name"].length < 2) problems.push("f-name");
-  if (!digits.startsWith("998") || digits.length !== 12) problems.push("f-phone");
-  if (fields["f-address"].length < 5) problems.push("f-address");
-
-  for (const id of Object.keys(fields)) el(id).classList.toggle("bad", problems.includes(id));
+  const problems = badContactFields(fields, "f-");
+  const needConsent = !el("agree-box").classList.contains("hidden") && !el("agree").checked;
+  el("agree-box").classList.toggle("bad", needConsent);
   if (problems.length) {
     return showError("Заполните имя, номер телефона в формате +998 XX XXX XX XX и адрес доставки.");
   }
+  if (needConsent) return showError("Отметьте согласие на обработку данных.");
 
   state.sending = true;
   el("submit-order").textContent = "Отправляем…";
@@ -483,6 +492,7 @@ async function submitOrder() {
         delivery_slot: state.slot,
         payment_method: state.payment,
         comment: el("f-comment").value.trim() || null,
+        consent: el("agree").checked,
         items: state.cart.map((i) => ({ variant_id: i.variantId, quantity: i.qty })),
         client_key: state.clientKey,
         expected_total: goodsTotal() + state.deliveryPrice,
@@ -525,6 +535,7 @@ async function submitOrder() {
     }
     renderDone(body);
     show("done");
+    if (state.profile) loadProfile();   // сервер запомнил данные — подтянем их обратно
   } catch (error) {
     console.error(error);
     // обрыв связи даёт техническое «Failed to fetch» — покупателю такое не показываем
@@ -560,6 +571,130 @@ function renderDone(order) {
       <div class="row"><span class="mut">Доставка</span>
         <span style="font-size:13px">${esc(order.delivery_slot)}</span></div>
     </div>`;
+}
+
+// ---------- профиль ----------
+
+function telegramName() {
+  const user = window.Telegram && window.Telegram.WebApp.initDataUnsafe
+    && window.Telegram.WebApp.initDataUnsafe.user;
+  return user ? [user.first_name, user.last_name].filter(Boolean).join(" ") : "";
+}
+
+/** Забирает сохранённые данные покупателя и подставляет их в оформление. */
+async function loadProfile() {
+  try {
+    state.profile = await api("/api/profile");
+  } catch (error) {
+    console.error(error);
+    // без профиля галочку согласия негде поставить, а без неё сервер не примет
+    // заказ — получился бы тупик. Считаем, что покупатель новый
+    state.profile = { name: telegramName(), phone: "", address: "", consent: false };
+  }
+  applyProfile();
+}
+
+/** Подтверждение средствами Telegram, а вне его — обычным окном браузера. */
+function ask(text, done) {
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if (tg && tg.showConfirm) return tg.showConfirm(text, done);
+  done(window.confirm(text));
+}
+
+function forgetProfile() {
+  ask("Удалить имя, телефон и адрес? Уже оформленные заказы останутся.", async (yes) => {
+    if (!yes) return;
+    try {
+      await api("/api/profile", { method: "DELETE" });
+      state.profile = { name: telegramName(), phone: "", address: "", consent: false };
+      applyProfile();
+      renderProfile();
+    } catch (error) {
+      console.error(error);
+      el("profile-error").textContent = "Не удалось удалить. Проверьте связь.";
+      el("profile-error").classList.remove("hidden");
+    }
+  });
+}
+
+function applyProfile() {
+  const p = state.profile;
+  if (!p) return;
+
+  el("f-name").value = p.name;
+  el("f-phone").value = p.phone || "+998 ";
+  el("f-address").value = p.address;
+  // согласие берётся один раз: уже дано — больше не спрашиваем
+  el("agree-box").classList.toggle("hidden", p.consent);
+
+  el("addr").classList.remove("hidden");
+  el("addr-t").textContent = p.address || "Укажите адрес";
+  el("addr-s").textContent = p.address ? "Доставим за 60–90 минут" : "Чтобы не набирать при заказе";
+}
+
+function renderProfile() {
+  const p = state.profile || { name: "", phone: "", address: "", consent: false };
+  el("p-name").value = p.name;
+  el("p-phone").value = p.phone || "+998 ";
+  el("p-address").value = p.address;
+  el("p-agree-box").classList.toggle("hidden", p.consent);
+  el("p-agree").checked = false;
+  el("profile-error").classList.add("hidden");
+  el("save-profile").textContent = "Сохранить";
+  el("forget").classList.toggle("hidden", !p.consent);
+}
+
+async function saveProfile() {
+  if (state.savingProfile) return;   // двойное нажатие завело бы вторую запись
+  const fields = {
+    "p-name": el("p-name").value.trim(),
+    "p-phone": el("p-phone").value.trim(),
+    "p-address": el("p-address").value.trim(),
+  };
+  const problems = badContactFields(fields, "p-");
+  const needConsent = !el("p-agree-box").classList.contains("hidden") && !el("p-agree").checked;
+  el("p-agree-box").classList.toggle("bad", needConsent);
+  if (problems.length || needConsent) {
+    el("profile-error").textContent = problems.length
+      ? "Заполните имя, номер телефона в формате +998 XX XXX XX XX и адрес доставки."
+      : "Отметьте согласие на обработку данных.";
+    return el("profile-error").classList.remove("hidden");
+  }
+
+  state.savingProfile = true;
+  el("save-profile").textContent = "Сохраняем…";
+  try {
+    state.profile = await api("/api/profile", {
+      method: "PUT",
+      body: {
+        customer_name: fields["p-name"],
+        phone: fields["p-phone"],
+        address: fields["p-address"],
+        consent: true,
+      },
+    });
+    applyProfile();
+    show("catalog");
+  } catch (error) {
+    console.error(error);
+    el("profile-error").textContent =
+      error.detail || "Не удалось сохранить. Проверьте данные и связь.";
+    el("profile-error").classList.remove("hidden");
+    el("save-profile").textContent = "Сохранить";
+  } finally {
+    state.savingProfile = false;
+  }
+}
+
+/** Общая проверка имени, телефона и адреса: одинаковая в заказе и в профиле. */
+function badContactFields(values, prefix) {
+  const digits = values[`${prefix}phone`].replace(/\D/g, "");
+  const problems = [];
+  if (values[`${prefix}name`].length < 2) problems.push(`${prefix}name`);
+  if (!digits.startsWith("998") || digits.length !== 12) problems.push(`${prefix}phone`);
+  if (values[`${prefix}address`].length < 5) problems.push(`${prefix}address`);
+  for (const id of Object.keys(values)) el(id).classList.toggle("bad", problems.includes(id));
+  return problems;
 }
 
 // ---------- мои заказы ----------
@@ -603,12 +738,12 @@ function orderCard(order) {
 
 // ---------- переключение экранов ----------
 
-const SCREENS = ["catalog", "product", "cart", "checkout", "done", "orders"];
+const SCREENS = ["catalog", "product", "cart", "checkout", "done", "orders", "profile"];
 
 // корневые разделы — те, между которыми переключает нижнее меню. Остальные
 // экраны открываются «поверх» и меню не показывают: у них своя кнопка внизу
-const ROOT_SCREENS = ["catalog", "cart", "orders"];
-const SCREENS_WITH_BUTTON = ["product", "cart", "checkout", "done"];
+const ROOT_SCREENS = ["catalog", "cart", "orders", "profile"];
+const SCREENS_WITH_BUTTON = ["product", "cart", "checkout", "done", "profile"];
 
 // куда ведёт кнопка «назад» Telegram с каждого некорневого экрана
 const BACK_TO = { product: "catalog", checkout: "cart", done: "catalog" };
@@ -686,10 +821,17 @@ document.addEventListener("click", (event) => {
   if (event.target.closest("#back")) return show("catalog");
   if (event.target.closest("#add")) return addToCart();
 
+  if (event.target.closest("#save-profile")) return saveProfile();
+  if (event.target.closest("#forget")) return forgetProfile();
+
   const tab = event.target.closest("[data-tab]");
   if (tab) {
     if (tab.dataset.tab === "cart") return openCart();
     if (tab.dataset.tab === "orders") return openOrders();
+    if (tab.dataset.tab === "profile") {
+      renderProfile();
+      return show("profile");
+    }
     return show("catalog");
   }
 
@@ -771,13 +913,11 @@ function setupTelegram() {
     console.error(error);   // старый клиент не знает часть команд — не повод падать
   }
 
-  if (!tg.initData) return;   // открыто в браузере: заказов у нас на него нет
+  if (!tg.initData) return;   // открыто в браузере: заказов и профиля на него нет
   el("tab-orders").classList.remove("hidden");
-  // подставляем имя, чтобы не набирать его руками. Телефона Telegram не даёт
-  const user = tg.initDataUnsafe && tg.initDataUnsafe.user;
-  if (user) {
-    el("f-name").value = [user.first_name, user.last_name].filter(Boolean).join(" ");
-  }
+  el("tab-profile").classList.remove("hidden");
+  // имя придёт от Telegram, телефон и адрес — из прошлого заказа, если он был
+  loadProfile();
 }
 
 async function start() {
