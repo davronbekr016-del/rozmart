@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ROZMART — прототип административной панели</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#EDEDED;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;color:#111;font-size:14px}
+.page{max-width:1280px;margin:0 auto;padding:22px 18px 46px}
+.intro{text-align:center;margin-bottom:18px}
+.intro h1{font-size:22px;font-weight:700;margin:0 0 4px;color:#E30613;letter-spacing:.4px}
+.intro p{margin:0;font-size:13px;color:#6E6E6E}
+.app{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 12px 36px rgba(0,0,0,.14);display:flex;min-height:720px}
+.side{width:242px;background:#FAFAFA;border-right:1px solid #ECECEC;flex:none;padding:16px 0}
+.brand{padding:0 18px 16px;border-bottom:1px solid #ECECEC;margin-bottom:12px}
+.brand .lg{font-size:19px;font-weight:700;color:#E30613;letter-spacing:.4px}
+.brand .sb{font-size:11px;color:#8A8A8A;margin-top:2px}
+.nav{display:flex;align-items:center;gap:10px;padding:10px 18px;font-size:13px;color:#4A4A4A;cursor:pointer;border-left:3px solid transparent}
+.nav:hover{background:#F2F2F2}
+.nav.on{background:#FFF0F0;color:#B3050F;border-left-color:#E30613;font-weight:500}
+.nav i{font-size:17px}
+.navid{margin-left:auto;font-size:10px;color:#B0B0B0}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.bar{border-bottom:1px solid #ECECEC;padding:14px 22px;display:flex;justify-content:space-between;align-items:center;flex:none}
+.bar h2{margin:0;font-size:17px;font-weight:600}
+.bar .who{font-size:12px;color:#8A8A8A}
+.body{padding:20px 22px;overflow:auto}
+.pane{display:none}
+.pane.on{display:block}
+.btn{background:#E30613;color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit}
+.btn2{background:#fff;color:#5A5A5A;border:1px solid #D8D8D8}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-weight:500;color:#8A8A8A;font-size:12px;padding:9px 10px;border-bottom:1px solid #ECECEC;white-space:nowrap}
+td{padding:10px;border-bottom:1px solid #F4F4F4;vertical-align:middle}
+tr:hover td{background:#FAFAFA}
+.thumb{width:38px;height:38px;border-radius:7px;background:#F7F7F7;position:relative;overflow:hidden;flex:none}
+.thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:2px}
+.tag{border-radius:20px;padding:3px 10px;font-size:11px;font-weight:500;white-space:nowrap;display:inline-block}
+.t-ok{background:#E7F4E4;color:#2F6B22}
+.t-warn{background:#FFF6E5;color:#854F0B}
+.t-bad{background:#FFF0F0;color:#B3050F}
+.t-gray{background:#F1F1F1;color:#5F5E5A}
+.sw{width:38px;height:21px;border-radius:12px;background:#D8D8D8;position:relative;cursor:pointer;display:inline-block}
+.sw:after{content:"";position:absolute;top:2px;left:2px;width:17px;height:17px;border-radius:50%;background:#fff;transition:left .15s}
+.sw.on{background:#2F6B22}
+.sw.on:after{left:19px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px;margin-bottom:20px}
+.mc{background:#FAFAFA;border-radius:10px;padding:14px}
+.mc .l{font-size:12px;color:#8A8A8A;margin-bottom:6px}
+.mc .v{font-size:22px;font-weight:600}
+.mc .d{font-size:11px;color:#8A8A8A;margin-top:3px}
+.fld{margin-bottom:16px;max-width:440px}
+.fld label{display:block;font-size:12px;color:#7A7A7A;margin-bottom:5px}
+.fld input,.fld select{width:100%;border:1px solid #E0E0E0;border-radius:8px;padding:10px;font-size:13px;font-family:inherit;color:#111}
+.fld .h{font-size:11px;color:#A0A0A0;margin-top:4px}
+.sec{font-size:14px;font-weight:600;margin:24px 0 12px}
+.sec:first-child{margin-top:0}
+.note{background:#FFF6E5;color:#854F0B;border-radius:8px;padding:11px 13px;font-size:12.5px;line-height:1.6;margin-bottom:16px}
+.filters{display:flex;gap:9px;margin-bottom:14px;flex-wrap:wrap}
+.filters select,.filters input{border:1px solid #E0E0E0;border-radius:8px;padding:8px 10px;font-size:12.5px;font-family:inherit;color:#111}
+.rev{border:1px solid #EFEFEF;border-radius:10px;padding:13px;margin-bottom:10px}
+.hint{max-width:760px;margin:22px auto 0;background:#fff;border:1px solid #E2E2E2;border-radius:12px;padding:14px 18px;font-size:12.5px;line-height:1.7;color:#5A5A5A}
+.hint b{color:#111}
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="intro">
+  <h1>ROZMART</h1>
+  <p>Прототип административной панели · десктоп · экраны SA-01 — SA-09</p>
+</div>
+
+<div style="display:flex;gap:8px;justify-content:center;margin-bottom:16px">
+  <a href="index.html" style="background:#fff;color:#5A5A5A;border:1px solid #DADADA;border-radius:8px;padding:8px 16px;font-size:13px;text-decoration:none">Клиент · 12 экранов</a>
+  <a href="staff.html" style="background:#fff;color:#5A5A5A;border:1px solid #DADADA;border-radius:8px;padding:8px 16px;font-size:13px;text-decoration:none">Оператор и курьер · 9</a>
+  <span style="background:#E30613;color:#fff;border:1px solid #E30613;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:500">Админ-панель · 9</span>
+</div>
+
+<div class="app">
+  <div class="side">
+    <div class="brand"><div class="lg">ROZMART</div><div class="sb">Административная панель</div></div>
+    <div class="nav on" data-go="SA-01"><i class="ti ti-package"></i> Категории и товары <span class="navid">SA-01</span></div>
+    <div class="nav" data-go="SA-02"><i class="ti ti-discount"></i> Акции и промокоды <span class="navid">SA-02</span></div>
+    <div class="nav" data-go="SA-03"><i class="ti ti-adjustments"></i> Параметры сервиса <span class="navid">SA-03</span></div>
+    <div class="nav" data-go="SA-04"><i class="ti ti-shopping-bag"></i> Заказы <span class="navid">SA-04</span></div>
+    <div class="nav" data-go="SA-05"><i class="ti ti-users"></i> Пользователи и роли <span class="navid">SA-05</span></div>
+    <div class="nav" data-go="SA-06"><i class="ti ti-chart-bar"></i> Отчёты <span class="navid">SA-06</span></div>
+    <div class="nav" data-go="SA-07"><i class="ti ti-star"></i> Отзывы и обращения <span class="navid">SA-07</span></div>
+    <div class="nav" data-go="SA-08"><i class="ti ti-history"></i> Журнал действий <span class="navid">SA-08</span></div>
+    <div class="nav" data-go="SA-09"><i class="ti ti-cash-banknote"></i> Финучёт и сверка <span class="navid">SA-09</span></div>
+  </div>
+
+  <div class="main">
+    <div class="bar"><h2 id="ttl">Категории и товары</h2><div class="who">Администратор каталога · филиал SAMPI</div></div>
+    <div class="body">
+
+<div class="pane on" id="SA-01" data-t="Категории и товары">
+  <div class="filters">
+    <select><option>Все категории</option><option>Копчёные колбасы (29)</option><option>Варёные колбасы (27)</option><option>Сосиски (35)</option><option>Мясные снеки MEET (6)</option></select>
+    <select><option>Все товары</option><option>Только активные</option><option>Только скрытые</option></select>
+    <input placeholder="Поиск по наименованию" style="min-width:210px">
+    <button class="btn" style="margin-left:auto"><i class="ti ti-plus"></i> Добавить товар</button>
+  </div>
+  <table>
+    <thead><tr><th style="width:52px"></th><th>Наименование</th><th>Категория</th><th>Фасовка</th><th>Цена, UZS</th><th style="width:90px">Активен</th><th style="width:40px"></th></tr></thead>
+    <tbody>
+      <tr><td><div class="thumb"><img src="img/p-servelat.jpg" alt=""></div></td><td>Сервелат копчёный</td><td>Копчёные колбасы</td><td>600 г</td><td>75 000</td><td><span class="sw on"></span></td><td><i class="ti ti-dots-vertical" style="color:#B0B0B0"></i></td></tr>
+      <tr><td><div class="thumb"><img src="img/p-salyami.jpg" alt=""></div></td><td>Салями копчёная</td><td>Копчёные колбасы</td><td>600 г</td><td>89 000</td><td><span class="sw on"></span></td><td><i class="ti ti-dots-vertical" style="color:#B0B0B0"></i></td></tr>
+      <tr><td><div class="thumb"><img src="img/p-moskovskaya.jpg" alt=""></div></td><td>Московская копчёная</td><td>Копчёные колбасы</td><td>500 г</td><td>68 000</td><td><span class="sw"></span></td><td><i class="ti ti-dots-vertical" style="color:#B0B0B0"></i></td></tr>
+      <tr><td><div class="thumb"><img src="img/p-doktorskaya.jpg" alt=""></div></td><td>Докторская варёная</td><td>Варёные колбасы</td><td>455 г</td><td>42 000</td><td><span class="sw on"></span></td><td><i class="ti ti-dots-vertical" style="color:#B0B0B0"></i></td></tr>
+      <tr><td><div class="thumb"><img src="img/p-elitnaya.jpg" alt=""></div></td><td>Элитная варёная</td><td>Варёные колбасы</td><td>700 г</td><td>55 000</td><td><span class="sw on"></span></td><td><i class="ti ti-dots-vertical" style="color:#B0B0B0"></i></td></tr>
+      <tr><td><div class="thumb"><img src="img/p-sos-molochnye.jpg" alt=""></div></td><td>Сосиски молочные</td><td>Сосиски</td><td>400 г</td><td>32 000</td><td><span class="sw on"></span></td><td><i class="ti ti-dots-vertical" style="color:#B0B0B0"></i></td></tr>
+      <tr><td><div class="thumb"><img src="img/p-sos-sirnye.jpg" alt=""></div></td><td>Сосиски сырные</td><td>Сосиски</td><td>700 г</td><td>58 000</td><td><span class="sw on"></span></td><td><i class="ti ti-dots-vertical" style="color:#B0B0B0"></i></td></tr>
+      <tr><td><div class="thumb"><img src="img/p-snack-bbq.jpg" alt=""></div></td><td>Снеки MEET Барбекю</td><td>Мясные снеки MEET</td><td>50 г</td><td>18 000</td><td><span class="sw on"></span></td><td><i class="ti ti-dots-vertical" style="color:#B0B0B0"></i></td></tr>
+    </tbody>
+  </table>
+  <div class="note" style="margin-top:18px"><i class="ti ti-info-circle"></i> Скрытый товар (переключатель выключен) не виден клиентам, но сохраняется в системе и в ранее оформленных заказах. Изменение цены не влияет на уже оформленные заказы.</div>
+</div>
+
+<div class="pane" id="SA-02" data-t="Акции и промокоды">
+  <div class="filters"><button class="btn"><i class="ti ti-plus"></i> Создать акцию</button><button class="btn btn2"><i class="ti ti-ticket"></i> Создать промокод</button></div>
+  <div class="sec">Промокоды</div>
+  <table>
+    <thead><tr><th>Код</th><th>Скидка</th><th>Период действия</th><th>Применений</th><th>Статус</th><th style="width:40px"></th></tr></thead>
+    <tbody>
+      <tr><td><b>ROZ10</b></td><td>10% на весь заказ</td><td>01.08.2026 — 31.08.2026</td><td>142</td><td><span class="tag t-ok">Активен</span></td><td><i class="ti ti-dots-vertical" style="color:#B0B0B0"></i></td></tr>
+      <tr><td><b>FIRST</b></td><td>15 000 UZS на первый заказ</td><td>бессрочно</td><td>87</td><td><span class="tag t-ok">Активен</span></td><td><i class="ti ti-dots-vertical" style="color:#B0B0B0"></i></td></tr>
+      <tr><td><b>SUMMER</b></td><td>15% на снеки MEET</td><td>01.06.2026 — 15.08.2026</td><td>63</td><td><span class="tag t-gray">Истёк</span></td><td><i class="ti ti-dots-vertical" style="color:#B0B0B0"></i></td></tr>
+    </tbody>
+  </table>
+  <div class="sec">Акции на товары</div>
+  <table>
+    <thead><tr><th>Название</th><th>Товары</th><th>Скидка</th><th>Период</th><th>Статус</th><th style="width:40px"></th></tr></thead>
+    <tbody>
+      <tr><td>Неделя сосисок</td><td>Категория «Сосиски» · 35 позиций</td><td>−12%</td><td>17.08 — 24.08.2026</td><td><span class="tag t-ok">Идёт</span></td><td><i class="ti ti-dots-vertical" style="color:#B0B0B0"></i></td></tr>
+      <tr><td>Новинка от завода</td><td>Салями копчёная 600 г</td><td>−20%</td><td>21.08 — 28.08.2026</td><td><span class="tag t-warn">Запланирована</span></td><td><i class="ti ti-dots-vertical" style="color:#B0B0B0"></i></td></tr>
+    </tbody>
+  </table>
+  <div class="note" style="margin-top:18px"><i class="ti ti-alert-triangle"></i> Правила программы лояльности и совмещения промокода с бонусами не определены (открытый вопрос OQ-06). Раздел «Бонусы» появится после решения заказчика.</div>
+</div>
+
+<div class="pane" id="SA-03" data-t="Параметры сервиса">
+  <div class="note"><i class="ti ti-info-circle"></i> Эти значения меняются здесь и применяются сразу — без участия разработчиков (требование NFR-M.1).</div>
+  <div class="sec">Доставка</div>
+  <div class="fld"><label>Стоимость доставки, UZS</label><input value="12 000"><div class="h">Единая для всей зоны обслуживания на первом этапе</div></div>
+  <div class="fld"><label>Минимальная сумма заказа, UZS</label><input value="не задана" style="color:#A0A0A0"><div class="h">Если не задана — ограничение не применяется. Значение ожидается от заказчика (OQ-04)</div></div>
+  <div class="fld"><label>Норматив времени доставки, минут</label><input value="не задан" style="color:#A0A0A0"><div class="h">Требуется для расчёта KPI (OQ-11)</div></div>
+  <div class="sec">Время работы</div>
+  <div class="fld" style="display:flex;gap:12px;max-width:440px">
+    <div style="flex:1"><label>Приём заказов с</label><input value="11:00"></div>
+    <div style="flex:1"><label>до</label><input value="18:00"></div>
+  </div>
+  <div class="fld"><div class="h" style="margin-top:0">Вне этого интервала заказ оформляется на следующий рабочий день</div></div>
+  <div class="sec">Сборка и доставка</div>
+  <div class="fld"><label>Норматив сборки заказа, минут</label><input value="10"></div>
+  <div class="fld"><label>Лимит ожидания недоступного клиента, минут</label><input value="не задан" style="color:#A0A0A0"><div class="h">По истечении заказ возвращается оператору. Значение ожидается от заказчика (OQ-03)</div></div>
+  <div class="sec">Оплата</div>
+  <div class="fld"><label>Платёжный партнёр</label><select><option>Payme</option><option>Click</option><option>Payme и Click</option></select><div class="h">Окончательный выбор не утверждён (OQ-12)</div></div>
+  <div class="fld"><label>Максимум попыток онлайн-оплаты</label><input value="3"></div>
+  <div style="margin-top:22px"><button class="btn">Сохранить изменения</button> <button class="btn btn2">Отменить</button></div>
+</div>
+
+<div class="pane" id="SA-04" data-t="Заказы">
+  <div class="filters">
+    <select><option>Все статусы</option><option>Заказ принят</option><option>В сборке</option><option>Упакован</option><option>В пути</option><option>Доставлен</option><option>Отменён</option></select>
+    <select><option>Все способы оплаты</option><option>Онлайн</option><option>Наличные</option></select>
+    <input type="date" value="2026-08-19">
+    <input placeholder="Номер заказа или телефон" style="min-width:200px">
+    <button class="btn btn2" style="margin-left:auto"><i class="ti ti-download"></i> Выгрузить</button>
+  </div>
+  <table>
+    <thead><tr><th>Заказ</th><th>Клиент</th><th>Позиций</th><th>Сумма, UZS</th><th>Оплата</th><th>Статус</th><th>Оператор</th><th>Курьер</th></tr></thead>
+    <tbody>
+      <tr><td><b>RB-8301</b><div style="font-size:11px;color:#A0A0A0">16:12</div></td><td>Каримов Ж.</td><td>2</td><td>96 000</td><td>Наличные</td><td><span class="tag t-warn">В пути</span></td><td>Дилноза А.</td><td>Бахтиёр</td></tr>
+      <tr><td><b>RB-8297</b><div style="font-size:11px;color:#A0A0A0">16:18</div></td><td>Азизов С.</td><td>4</td><td>213 600</td><td>Онлайн</td><td><span class="tag t-warn">В сборке</span></td><td>Дилноза А.</td><td>—</td></tr>
+      <tr><td><b>RB-8296</b><div style="font-size:11px;color:#A0A0A0">16:09</div></td><td>Юсупова М.</td><td>7</td><td>410 000</td><td>Онлайн</td><td><span class="tag t-ok">Упакован</span></td><td>Дилноза А.</td><td>Бахтиёр</td></tr>
+      <tr><td><b>RB-8288</b><div style="font-size:11px;color:#A0A0A0">14:41</div></td><td>Рахимов О.</td><td>3</td><td>84 000</td><td>Онлайн</td><td><span class="tag t-ok">Доставлен</span></td><td>Дилноза А.</td><td>Бахтиёр</td></tr>
+      <tr><td><b>RB-8285</b><div style="font-size:11px;color:#A0A0A0">13:20</div></td><td>Собиров А.</td><td>2</td><td>68 000</td><td>Онлайн</td><td><span class="tag t-bad">Отменён</span></td><td>—</td><td>—</td></tr>
+    </tbody>
+  </table>
+  <div class="note" style="margin-top:18px"><i class="ti ti-info-circle"></i> По клику на заказ открывается карточка с полной историей статусов, отметками времени и исполнителями — она же используется колл-центром при разборе жалоб.</div>
+</div>
+
+<div class="pane" id="SA-05" data-t="Пользователи и роли">
+  <div class="filters"><button class="btn"><i class="ti ti-plus"></i> Добавить сотрудника</button></div>
+  <table>
+    <thead><tr><th>Сотрудник</th><th>Роль</th><th>Филиал</th><th>Telegram</th><th>Доступ</th><th style="width:40px"></th></tr></thead>
+    <tbody>
+      <tr><td>Дилноза Абдуллаева</td><td>Оператор магазина</td><td>SAMPI</td><td>@dilnoza_rz</td><td><span class="tag t-ok">Активен</span></td><td><i class="ti ti-dots-vertical" style="color:#B0B0B0"></i></td></tr>
+      <tr><td>Бахтиёр Норматов</td><td>Курьер</td><td>SAMPI</td><td>@bakhtiyor_rz</td><td><span class="tag t-ok">Активен</span></td><td><i class="ti ti-dots-vertical" style="color:#B0B0B0"></i></td></tr>
+      <tr><td>—</td><td>Администратор каталога</td><td>SAMPI</td><td>—</td><td><span class="tag t-warn">Не назначен</span></td><td><i class="ti ti-dots-vertical" style="color:#B0B0B0"></i></td></tr>
+      <tr><td>Шохрух Рахмонов</td><td>Администратор системы</td><td>все</td><td>@shohruh_it</td><td><span class="tag t-ok">Активен</span></td><td><i class="ti ti-dots-vertical" style="color:#B0B0B0"></i></td></tr>
+      <tr><td>Колл-центр RDB</td><td>Оператор колл-центра</td><td>все</td><td>—</td><td><span class="tag t-ok">Активен</span></td><td><i class="ti ti-dots-vertical" style="color:#B0B0B0"></i></td></tr>
+      <tr><td>Директор ROZMART</td><td>Руководство</td><td>все</td><td>—</td><td><span class="tag t-ok">Активен</span></td><td><i class="ti ti-dots-vertical" style="color:#B0B0B0"></i></td></tr>
+    </tbody>
+  </table>
+  <div class="note" style="margin-top:18px"><i class="ti ti-alert-triangle"></i> Администратор каталога не назначен — заказчик планирует нанять сотрудника. Без него каталог и цены обновлять некому.</div>
+</div>
+
+<div class="pane" id="SA-06" data-t="Отчёты">
+  <div class="filters"><select><option>Сегодня</option><option>Неделя</option><option>Месяц</option><option>Произвольный период</option></select><button class="btn btn2" style="margin-left:auto"><i class="ti ti-download"></i> Выгрузить в таблицу</button></div>
+  <div class="cards">
+    <div class="mc"><div class="l">Заказов</div><div class="v">18</div><div class="d">вчера 14</div></div>
+    <div class="mc"><div class="l">Выручка</div><div class="v">2 148 000</div><div class="d">UZS</div></div>
+    <div class="mc"><div class="l">Средний чек</div><div class="v">119 333</div><div class="d">UZS</div></div>
+    <div class="mc"><div class="l">Отменено</div><div class="v">2</div><div class="d">11% от заказов</div></div>
+  </div>
+  <div class="sec">Операционные показатели</div>
+  <div class="cards">
+    <div class="mc"><div class="l">Среднее время сборки</div><div class="v">7:12</div><div class="d">норматив 10:00</div></div>
+    <div class="mc"><div class="l">Среднее время доставки</div><div class="v">48 мин</div><div class="d">норматив не задан</div></div>
+    <div class="mc"><div class="l">Успешных онлайн-оплат</div><div class="v">96%</div><div class="d">цель ≥ 95%</div></div>
+    <div class="mc"><div class="l">Заказы с нехваткой товара</div><div class="v">3</div><div class="d">17% от заказов</div></div>
+  </div>
+  <div class="sec">Популярные товары</div>
+  <table>
+    <thead><tr><th style="width:52px"></th><th>Товар</th><th>Категория</th><th>Продано, шт</th><th>Выручка, UZS</th></tr></thead>
+    <tbody>
+      <tr><td><div class="thumb"><img src="img/p-sos-molochnye.jpg" alt=""></div></td><td>Сосиски молочные · 400 г</td><td>Сосиски</td><td>24</td><td>768 000</td></tr>
+      <tr><td><div class="thumb"><img src="img/p-servelat.jpg" alt=""></div></td><td>Сервелат копчёный · 600 г</td><td>Копчёные колбасы</td><td>11</td><td>825 000</td></tr>
+      <tr><td><div class="thumb"><img src="img/p-doktorskaya.jpg" alt=""></div></td><td>Докторская варёная · 455 г</td><td>Варёные колбасы</td><td>9</td><td>378 000</td></tr>
+      <tr><td><div class="thumb"><img src="img/p-snack-bbq.jpg" alt=""></div></td><td>Снеки MEET Барбекю · 50 г</td><td>Мясные снеки MEET</td><td>7</td><td>126 000</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="pane" id="SA-07" data-t="Отзывы и обращения">
+  <div class="filters"><select><option>Все оценки</option><option>Только 1–2 звезды</option><option>4–5 звёзд</option></select><select><option>Отзывы и жалобы</option><option>Только отзывы</option><option>Только жалобы</option></select></div>
+  <div class="cards">
+    <div class="mc"><div class="l">Средняя оценка</div><div class="v">4,6</div><div class="d">за 13 отзывов</div></div>
+    <div class="mc"><div class="l">Обращений в колл-центр</div><div class="v">3</div><div class="d">за неделю</div></div>
+    <div class="mc"><div class="l">Обоснованных жалоб</div><div class="v">1</div><div class="d">33% обращений</div></div>
+  </div>
+  <div class="sec">Последние отзывы</div>
+  <div class="rev">
+    <div style="display:flex;justify-content:space-between;margin-bottom:6px"><div><b>RB-8288</b> <span style="color:#A0A0A0;font-size:12px">· Рахимов О. · курьер Бахтиёр</span></div><div style="color:#EF9F27"><i class="ti ti-star"></i><i class="ti ti-star"></i><i class="ti ti-star"></i><i class="ti ti-star"></i><i class="ti ti-star"></i></div></div>
+    <div style="font-size:13px;color:#4A4A4A">Всё быстро, курьер вежливый. Колбаса свежая.</div>
+  </div>
+  <div class="rev">
+    <div style="display:flex;justify-content:space-between;margin-bottom:6px"><div><b>RB-8279</b> <span style="color:#A0A0A0;font-size:12px">· Юсупова М. · курьер Бахтиёр</span></div><div style="color:#EF9F27"><i class="ti ti-star"></i><i class="ti ti-star"></i><i class="ti ti-star"></i><i class="ti ti-star" style="color:#D5D5D5"></i><i class="ti ti-star" style="color:#D5D5D5"></i></div></div>
+    <div style="font-size:13px;color:#4A4A4A">Привезли позже обещанного времени, пришлось ждать.</div>
+  </div>
+  <div class="sec">Обращения в колл-центр</div>
+  <table>
+    <thead><tr><th>Заказ</th><th>Дата</th><th>Тип обращения</th><th>Решение</th><th>Статус</th></tr></thead>
+    <tbody>
+      <tr><td><b>RB-8241</b></td><td>16.08.2026</td><td>Товар не соответствует заказу</td><td>Компенсация 32 000 UZS</td><td><span class="tag t-ok">Закрыто</span></td></tr>
+      <tr><td><b>RB-8230</b></td><td>14.08.2026</td><td>Претензия к качеству</td><td>Разъяснение клиенту</td><td><span class="tag t-ok">Закрыто</span></td></tr>
+      <tr><td><b>RB-8302</b></td><td>19.08.2026</td><td>Задержка доставки</td><td>—</td><td><span class="tag t-warn">В работе</span></td></tr>
+    </tbody>
+  </table>
+  <div class="note" style="margin-top:18px"><i class="ti ti-alert-triangle"></i> Ответственный за решения по жалобам внутри ROZMART не назначен (открытый вопрос OQ-07).</div>
+</div>
+
+<div class="pane" id="SA-08" data-t="Журнал действий">
+  <div class="filters"><select><option>Все пользователи</option><option>Дилноза А.</option><option>Бахтиёр</option><option>Шохрух Р.</option></select><select><option>Все типы действий</option><option>Изменение каталога</option><option>Изменение параметров</option><option>Смена статуса заказа</option><option>Отмена заказа</option></select><input type="date" value="2026-08-19"></div>
+  <table>
+    <thead><tr><th>Время</th><th>Пользователь</th><th>Действие</th><th>Объект</th><th>Изменение</th></tr></thead>
+    <tbody>
+      <tr><td>16:31</td><td>Дилноза А.</td><td>Смена статуса</td><td>Заказ RB-8297</td><td>В сборке → Упакован</td></tr>
+      <tr><td>16:24</td><td>Дилноза А.</td><td>Замена позиции</td><td>Заказ RB-8296</td><td>Сосиски молочные → Сосиски сырные, +26 000 UZS</td></tr>
+      <tr><td>16:20</td><td>Дилноза А.</td><td>Смена статуса</td><td>Заказ RB-8297</td><td>Заказ принят → В сборке</td></tr>
+      <tr><td>15:48</td><td>Шохрух Р.</td><td>Изменение параметра</td><td>Стоимость доставки</td><td>10 000 → 12 000 UZS</td></tr>
+      <tr><td>14:02</td><td>Шохрух Р.</td><td>Изменение цены</td><td>Салями копчёная 600 г</td><td>85 000 → 89 000 UZS</td></tr>
+      <tr><td>13:20</td><td>Система</td><td>Отмена заказа</td><td>Заказ RB-8285</td><td>Отменён клиентом до сборки, возврат 68 000 UZS</td></tr>
+    </tbody>
+  </table>
+  <div class="note" style="margin-top:18px"><i class="ti ti-lock"></i> Журнал доступен только для чтения — записи нельзя изменить или удалить из интерфейса (требование NFR-S.5).</div>
+</div>
+
+<div class="pane" id="SA-09" data-t="Финансовый учёт и сверка">
+  <div class="note"><i class="ti ti-alert-triangle"></i> Модуль M15 зафиксирован на верхнем уровне. Детализация возможна после ответа заказчика: кто принимает наличные у курьера и ведёт кассу магазина.</div>
+  <div class="sec">Наличная выручка по курьерам · смена 19.08.2026</div>
+  <table>
+    <thead><tr><th>Курьер</th><th>Заказов наличными</th><th>Начислено, UZS</th><th>Сдано, UZS</th><th>Расхождение</th><th>Статус смены</th></tr></thead>
+    <tbody>
+      <tr><td>Бахтиёр</td><td>3</td><td>248 000</td><td>248 000</td><td><span style="color:#2F6B22">0</span></td><td><span class="tag t-ok">Сдано</span></td></tr>
+      <tr><td>Бахтиёр</td><td>1</td><td>96 000</td><td>—</td><td><span style="color:#854F0B">− 96 000</span></td><td><span class="tag t-warn">В доставке</span></td></tr>
+    </tbody>
+  </table>
+  <div class="sec">Возвраты за период</div>
+  <table>
+    <thead><tr><th>Заказ</th><th>Дата</th><th>Сумма, UZS</th><th>Способ оплаты</th><th>Причина</th><th>Статус возврата</th></tr></thead>
+    <tbody>
+      <tr><td><b>RB-8285</b></td><td>19.08.2026</td><td>68 000</td><td>Онлайн · Payme</td><td>Отмена клиентом до сборки</td><td><span class="tag t-ok">Возвращено</span></td></tr>
+      <tr><td><b>RB-8272</b></td><td>18.08.2026</td><td>26 000</td><td>Онлайн · Payme</td><td>Частичный — позиция убрана при сборке</td><td><span class="tag t-warn">В обработке</span></td></tr>
+      <tr><td><b>RB-8241</b></td><td>16.08.2026</td><td>32 000</td><td>Онлайн · Payme</td><td>Компенсация по жалобе</td><td><span class="tag t-ok">Возвращено</span></td></tr>
+    </tbody>
+  </table>
+  <div class="sec">Сверка с платёжным агрегатором</div>
+  <div class="cards">
+    <div class="mc"><div class="l">Начислено системой</div><div class="v">1 904 000</div><div class="d">UZS · 14 транзакций</div></div>
+    <div class="mc"><div class="l">Поступило от Payme</div><div class="v">1 904 000</div><div class="d">UZS · реестр от 19.08</div></div>
+    <div class="mc"><div class="l">Возвраты</div><div class="v">126 000</div><div class="d">UZS · 3 операции</div></div>
+    <div class="mc"><div class="l">Расхождение</div><div class="v" style="color:#2F6B22">0</div><div class="d">сверка сходится</div></div>
+  </div>
+  <div style="margin-top:8px"><button class="btn">Закрыть сверку за 19.08.2026</button> <button class="btn btn2"><i class="ti ti-download"></i> Выгрузить реестр для бухгалтерии</button></div>
+</div>
+
+    </div>
+  </div>
+</div>
+
+<div class="hint">
+  <b>Что показано</b><br>
+  Девять экранов административной панели из раздела 7.4 SRS, включая SA-09 — новый модуль M15 «Финансовый учёт и сверка».
+  Данные демонстрационные, товары и фотографии — реальные из каталога ROZMETOV.<br>
+  <b>Незакрытые вопросы видны прямо в интерфейсе:</b> пустые параметры в SA-03 (минимальная сумма, норматив доставки,
+  лимит ожидания), неназначенный администратор каталога в SA-05, ответственный за жалобы в SA-07, организация кассы в SA-09.
+</div>
+
+</div>
+
+<script>
+(function(){
+  var panes=[].slice.call(document.querySelectorAll('.pane'));
+  var navs=[].slice.call(document.querySelectorAll('.nav'));
+  var ttl=document.getElementById('ttl');
+  function go(id){
+    panes.forEach(function(p){p.classList.toggle('on',p.id===id);});
+    navs.forEach(function(n){n.classList.toggle('on',n.dataset.go===id);});
+    var a=document.getElementById(id);
+    if(a){ttl.textContent=a.dataset.t;document.querySelector('.body').scrollTop=0;}
+  }
+  document.addEventListener('click',function(e){
+    var s=e.target.closest('.sw');
+    if(s){s.classList.toggle('on');return;}
+    var n=e.target.closest('[data-go]');
+    if(n){go(n.dataset.go);}
+  });
+})();
+</script>
+</body>
+</html>

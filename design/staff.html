@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ROZMART — прототип: оператор и курьер</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#EDEDED;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;color:#111}
+.wrap{max-width:1180px;margin:0 auto;padding:26px 18px 50px}
+.top{text-align:center;margin-bottom:16px}
+.top h1{font-size:23px;font-weight:700;margin:0 0 4px;color:#E30613;letter-spacing:.4px}
+.top p{margin:0;font-size:13px;color:#6E6E6E}
+.grp{text-align:center;margin:16px 0 8px;font-size:12px;color:#8A8A8A;text-transform:uppercase;letter-spacing:.6px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.chip{border:1px solid #DADADA;background:#fff;border-radius:20px;padding:6px 12px;font-size:12px;cursor:pointer;color:#5A5A5A;user-select:none}
+.chip:hover{border-color:#E30613;color:#E30613}
+.chip.on{background:#E30613;color:#fff;border-color:#E30613}
+.ph{width:430px;height:900px;background:#0d0d0d;border-radius:56px;padding:12px;position:relative;margin:22px auto 0;box-shadow:0 18px 50px rgba(0,0,0,.28)}
+.sc{position:absolute;inset:12px;border-radius:44px;overflow:hidden;background:#F5F5F5;display:none;flex-direction:column}
+.sc.on{display:flex}
+.di{position:absolute;top:24px;left:50%;transform:translateX(-50%);width:116px;height:32px;background:#0d0d0d;border-radius:20px;z-index:9}
+.sb{height:56px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 6px;font-size:14px;font-weight:500;flex:none;background:#E30613;color:#fff}
+.sbd{background:#1E1E1E;color:#fff}
+.hd{background:#E30613;color:#fff;padding:13px 18px;flex:none;font-size:16px;font-weight:500}
+.hdd{background:#1E1E1E}
+.bd{flex:1;overflow:auto;padding:14px 16px;background:#F5F5F5}
+.bd::-webkit-scrollbar{width:0}
+.ft{flex:none;padding:12px 16px 24px;border-top:1px solid #E8E8E8;background:#fff}
+.btn{width:100%;background:#E30613;color:#fff;border:none;border-radius:14px;padding:15px;font-size:15px;font-weight:500;cursor:pointer;font-family:inherit}
+.btn:active{opacity:.85}
+.btn2{background:#fff;color:#E30613;border:1px solid #E30613}
+.btn3{background:#1E1E1E;color:#fff}
+.btng{background:#fff;color:#5A5A5A;border:1px solid #D5D5D5}
+.card{background:#fff;border-radius:12px;padding:13px;margin-bottom:10px}
+.row{display:flex;justify-content:space-between;align-items:center}
+.mut{color:#7A7A7A;font-size:13px}
+.prc{color:#E30613;font-weight:600}
+.inp{width:100%;background:#fff;border:1px solid #E8E8E8;border-radius:10px;padding:12px;font-size:14px;font-family:inherit;color:#111}
+.tag{border-radius:20px;padding:4px 10px;font-size:11px;font-weight:500;white-space:nowrap}
+.t-new{background:#FFF0F0;color:#B3050F}
+.t-work{background:#FFF6E5;color:#854F0B}
+.t-ok{background:#E7F4E4;color:#2F6B22}
+.t-gray{background:#F1F1F1;color:#5F5E5A}
+.sla{font-size:11px;font-weight:600;padding:3px 8px;border-radius:6px}
+.s-ok{background:#E7F4E4;color:#2F6B22}
+.s-warn{background:#FFF6E5;color:#854F0B}
+.s-bad{background:#FFF0F0;color:#B3050F}
+.ph0{background:#F7F7F7;border-radius:8px;position:relative;overflow:hidden;flex:none}
+.ph0 img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:3px}
+.li{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid #F0F0F0}
+.li:last-child{border-bottom:none}
+.chk{width:22px;height:22px;border-radius:6px;border:1.5px solid #D5D5D5;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;color:#fff;font-size:13px}
+.chk.on{background:#2F6B22;border-color:#2F6B22}
+.opt{border:1px solid #E8E8E8;border-radius:10px;padding:12px;margin-bottom:8px;cursor:pointer;background:#fff}
+.opt.sel{border-color:#E30613;border-width:1.5px}
+.cap{text-align:center;margin-top:16px;font-size:13px;color:#6E6E6E}
+.hint{max-width:640px;margin:22px auto 0;background:#fff;border:1px solid #E2E2E2;border-radius:12px;padding:14px 18px;font-size:12.5px;line-height:1.7;color:#5A5A5A}
+.hint b{color:#111}
+.rcp{background:#fff;border:1px dashed #C8C8C8;border-radius:8px;padding:14px;font-family:"Courier New",monospace;font-size:11.5px;line-height:1.75;color:#222}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="top">
+  <h1>ROZMART</h1>
+  <p>Прототип рабочих мест персонала · Telegram · iPhone 15 Pro Max</p>
+</div>
+
+<div style="display:flex;gap:8px;justify-content:center;margin-bottom:6px">
+  <a href="index.html" style="background:#fff;color:#5A5A5A;border:1px solid #DADADA;border-radius:8px;padding:8px 16px;font-size:13px;text-decoration:none">Клиент · 12 экранов</a>
+  <span style="background:#E30613;color:#fff;border:1px solid #E30613;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:500">Оператор и курьер · 9</span>
+  <a href="admin.html" style="background:#fff;color:#5A5A5A;border:1px solid #DADADA;border-radius:8px;padding:8px 16px;font-size:13px;text-decoration:none">Админ-панель · 9</a>
+</div>
+
+<div class="grp">Оператор магазина</div>
+<div class="chips">
+  <span class="chip" data-go="SO-01">SO-01 Очередь заказов</span>
+  <span class="chip" data-go="SO-02">SO-02 Карточка заказа</span>
+  <span class="chip" data-go="SO-03">SO-03 Нехватка товара</span>
+  <span class="chip" data-go="SO-04">SO-04 Товарный чек</span>
+  <span class="chip" data-go="SO-05">SO-05 Отмена заказа</span>
+</div>
+
+<div class="grp">Курьер</div>
+<div class="chips">
+  <span class="chip" data-go="SD-01">SD-01 Мои заказы</span>
+  <span class="chip" data-go="SD-02">SD-02 Карточка доставки</span>
+  <span class="chip" data-go="SD-03">SD-03 Статусы</span>
+  <span class="chip" data-go="SD-04">SD-04 Приём оплаты</span>
+</div>
+
+<div class="ph">
+<div class="di"></div>
+
+<div class="sc" id="SO-01" data-name="SO-01 · Очередь заказов (оператор)">
+  <div class="sb"><span>16:20</span><span><i class="ti ti-wifi"></i> <i class="ti ti-battery-3"></i></span></div>
+  <div class="hd"><div class="row"><div><div style="font-size:16px;font-weight:600">Очередь заказов</div><div style="font-size:11px;opacity:.85">Филиал SAMPI · смена Дилноза</div></div><i class="ti ti-refresh" style="font-size:19px"></i></div></div>
+  <div class="bd">
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <div style="flex:1;background:#fff;border-radius:10px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:600;color:#E30613">2</div><div class="mut" style="font-size:11px">новых</div></div>
+      <div style="flex:1;background:#fff;border-radius:10px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:600;color:#854F0B">1</div><div class="mut" style="font-size:11px">в сборке</div></div>
+      <div style="flex:1;background:#fff;border-radius:10px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:600;color:#2F6B22">1</div><div class="mut" style="font-size:11px">готов</div></div>
+    </div>
+
+    <div class="card" data-go="SO-02" style="cursor:pointer;border-left:4px solid #E30613">
+      <div class="row" style="margin-bottom:7px"><span style="font-size:15px;font-weight:600">RB-8297</span><span class="tag t-new">Новый</span></div>
+      <div class="mut" style="font-size:12px;margin-bottom:8px">Поступил 16:18 · 4 позиции · <span class="prc">213 600 UZS</span></div>
+      <div class="row"><span class="mut" style="font-size:12px"><i class="ti ti-credit-card" style="color:#2F6B22"></i> Оплачен онлайн</span><span class="sla s-ok">не принят · 2:14</span></div>
+    </div>
+
+    <div class="card" data-go="SO-02" style="cursor:pointer;border-left:4px solid #E30613">
+      <div class="row" style="margin-bottom:7px"><span style="font-size:15px;font-weight:600">RB-8301</span><span class="tag t-new">Новый</span></div>
+      <div class="mut" style="font-size:12px;margin-bottom:8px">Поступил 16:12 · 2 позиции · 96 000 UZS</div>
+      <div class="row"><span class="mut" style="font-size:12px"><i class="ti ti-cash" style="color:#854F0B"></i> Наличными курьеру</span><span class="sla s-warn">не принят · 7:48</span></div>
+    </div>
+
+    <div class="card" style="border-left:4px solid #BA7517">
+      <div class="row" style="margin-bottom:7px"><span style="font-size:15px;font-weight:600">RB-8296</span><span class="tag t-work">В сборке</span></div>
+      <div class="mut" style="font-size:12px;margin-bottom:8px">Принят 16:09 · 7 позиций · <span class="prc">410 000 UZS</span></div>
+      <div class="row"><span class="mut" style="font-size:12px"><i class="ti ti-credit-card" style="color:#2F6B22"></i> Оплачен онлайн</span><span class="sla s-bad">сборка · 11:02</span></div>
+    </div>
+
+    <div class="card" style="border-left:4px solid #2F6B22">
+      <div class="row" style="margin-bottom:7px"><span style="font-size:15px;font-weight:600">RB-8294</span><span class="tag t-ok">Упакован</span></div>
+      <div class="mut" style="font-size:12px;margin-bottom:8px">Собран за 6:41 · 3 позиции · 128 000 UZS</div>
+      <div class="row"><span class="mut" style="font-size:12px"><i class="ti ti-motorbike"></i> Ожидает курьера</span><span class="mut" style="font-size:11px">Бахтиёр</span></div>
+    </div>
+
+    <div class="mut" style="font-size:11px;text-align:center;line-height:1.6;margin-top:6px">Норматив сборки — 10 минут с момента принятия в работу</div>
+  </div>
+</div>
+
+<div class="sc" id="SO-02" data-name="SO-02 · Карточка заказа (сборка)">
+  <div class="sb"><span>16:22</span><span><i class="ti ti-wifi"></i> <i class="ti ti-battery-3"></i></span></div>
+  <div class="hd"><div class="row"><span data-go="SO-01" style="cursor:pointer"><i class="ti ti-chevron-left" style="font-size:21px"></i></span><span>Заказ RB-8297</span><span style="width:21px"></span></div></div>
+  <div class="bd">
+    <div class="card" style="background:#FFF6E5">
+      <div class="row"><div><div style="font-size:14px;font-weight:600;color:#854F0B">Сборка идёт</div><div style="font-size:11px;color:#854F0B;opacity:.85">начата в 16:20</div></div><div style="font-size:22px;font-weight:700;color:#854F0B">02:41</div></div>
+    </div>
+
+    <div class="card">
+      <div class="mut" style="font-size:12px;margin-bottom:10px">Этапы обработки</div>
+      <div style="display:flex;gap:11px;margin-bottom:11px"><div style="width:22px;height:22px;border-radius:50%;background:#2F6B22;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;flex:none"><i class="ti ti-check"></i></div><div><div style="font-size:13px">Принят в работу</div><div class="mut" style="font-size:11px">16:19 · Дилноза А.</div></div></div>
+      <div style="display:flex;gap:11px;margin-bottom:11px"><div style="width:22px;height:22px;border-radius:50%;background:#BA7517;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;flex:none"><i class="ti ti-player-play"></i></div><div><div style="font-size:13px;font-weight:600">Сборка начата</div><div class="mut" style="font-size:11px">16:20 · отмена клиентом заблокирована</div></div></div>
+      <div style="display:flex;gap:11px;opacity:.4"><div style="width:22px;height:22px;border-radius:50%;border:1.5px solid #D5D5D5;flex:none"></div><div><div style="font-size:13px">Упакован</div><div class="mut" style="font-size:11px">ожидается</div></div></div>
+    </div>
+
+    <div class="card">
+      <div class="mut" style="font-size:12px;margin-bottom:6px">Отметьте собранные позиции</div>
+      <div class="li"><span class="chk on"><i class="ti ti-check"></i></span><div class="ph0" style="width:42px;height:42px"><img src="img/p-servelat.jpg" alt=""></div><div style="flex:1"><div style="font-size:13px">Сервелат копчёный · 600 г</div><div class="mut" style="font-size:11px">75 000 UZS</div></div><span style="font-size:15px;font-weight:600">×2</span></div>
+      <div class="li"><span class="chk on"><i class="ti ti-check"></i></span><div class="ph0" style="width:42px;height:42px"><img src="img/p-doktorskaya.jpg" alt=""></div><div style="flex:1"><div style="font-size:13px">Докторская варёная · 455 г</div><div class="mut" style="font-size:11px">42 000 UZS</div></div><span style="font-size:15px;font-weight:600">×1</span></div>
+      <div class="li"><span class="chk"></span><div class="ph0" style="width:42px;height:42px"><img src="img/p-sos-molochnye.jpg" alt=""></div><div style="flex:1"><div style="font-size:13px">Сосиски молочные · 400 г</div><div class="mut" style="font-size:11px">32 000 UZS</div></div><span style="font-size:15px;font-weight:600">×1</span></div>
+    </div>
+
+    <div class="card" data-go="SO-03" style="cursor:pointer;border:1px solid #FFD9D9">
+      <div class="row"><span style="font-size:13px;color:#B3050F"><i class="ti ti-alert-triangle"></i> Товара нет в наличии</span><i class="ti ti-chevron-right" style="color:#B0B0B0"></i></div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="margin-bottom:9px"><span class="mut">Оплата</span><span style="font-size:13px;color:#2F6B22">Оплачен онлайн · 213 600 UZS</span></div>
+      <div class="row" style="margin-bottom:9px"><span class="mut">Доставка</span><span style="font-size:13px">сегодня 16:00–18:00</span></div>
+      <div class="row" style="margin-bottom:9px"><span class="mut">Адрес</span><span style="font-size:13px;text-align:right;max-width:180px">Юнусабад, Амира Темура 45, кв. 12</span></div>
+      <div class="row"><span class="mut">Телефон</span><span style="font-size:13px;color:#E30613">+998 90 123 45 67</span></div>
+    </div>
+
+    <div class="card" style="background:#F7F7F7">
+      <div class="mut" style="font-size:12px;margin-bottom:4px">Комментарий клиента</div>
+      <div style="font-size:13px;line-height:1.55">Позвонить за 10 минут до приезда, домофон не работает</div>
+    </div>
+
+    <div class="card" data-go="SO-05" style="cursor:pointer;opacity:.75">
+      <div class="row"><span style="font-size:13px"><i class="ti ti-x"></i> Отменить заказ</span><i class="ti ti-chevron-right" style="color:#B0B0B0"></i></div>
+    </div>
+  </div>
+  <div class="ft"><button class="btn" data-go="SO-04">Заказ упакован</button></div>
+</div>
+
+<div class="sc" id="SO-03" data-name="SO-03 · Нехватка товара">
+  <div class="sb"><span>16:24</span><span><i class="ti ti-wifi"></i> <i class="ti ti-battery-3"></i></span></div>
+  <div class="hd"><div class="row"><span data-go="SO-02" style="cursor:pointer"><i class="ti ti-chevron-left" style="font-size:21px"></i></span><span>Нехватка товара</span><span style="width:21px"></span></div></div>
+  <div class="bd">
+    <div class="card">
+      <div class="mut" style="font-size:12px;margin-bottom:8px">Какой позиции не хватает?</div>
+      <div class="li"><span class="chk"></span><div style="flex:1;font-size:13px">Сервелат копчёный · 600 г ×2</div></div>
+      <div class="li"><span class="chk"></span><div style="flex:1;font-size:13px">Докторская варёная · 455 г ×1</div></div>
+      <div class="li"><span class="chk on"><i class="ti ti-check"></i></span><div style="flex:1;font-size:13px">Сосиски молочные · 400 г ×1</div></div>
+    </div>
+
+    <div class="mut" style="font-size:12px;margin:14px 0 8px">Свяжитесь с клиентом и зафиксируйте его решение</div>
+
+    <div class="opt sel"><div class="row"><div><div style="font-size:14px;font-weight:500">Заменить товар</div><div class="mut" style="font-size:11px;margin-top:2px">Подобрать аналог, согласовать с клиентом</div></div><i class="ti ti-circle-check" style="font-size:20px;color:#E30613"></i></div></div>
+    <div class="opt"><div class="row"><div><div style="font-size:14px;font-weight:500">Убрать позицию</div><div class="mut" style="font-size:11px;margin-top:2px">Сумма пересчитается автоматически</div></div><i class="ti ti-circle" style="font-size:20px;color:#D5D5D5"></i></div></div>
+    <div class="opt"><div class="row"><div><div style="font-size:14px;font-weight:500">Отменить весь заказ</div><div class="mut" style="font-size:11px;margin-top:2px">При онлайн-оплате деньги вернутся клиенту</div></div><i class="ti ti-circle" style="font-size:20px;color:#D5D5D5"></i></div></div>
+
+    <div class="card" style="margin-top:12px">
+      <div class="mut" style="font-size:12px;margin-bottom:8px">Замена на</div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <div class="ph0" style="width:48px;height:48px"><img src="img/p-sos-sirnye.jpg" alt=""></div>
+        <div style="flex:1"><div style="font-size:13px">Сосиски сырные · 700 г</div><div class="prc" style="font-size:12px;margin-top:2px">58 000 UZS</div></div>
+        <i class="ti ti-chevron-right" style="color:#B0B0B0"></i>
+      </div>
+      <div class="row" style="border-top:1px solid #F0F0F0;margin-top:10px;padding-top:10px"><span class="mut" style="font-size:12px">Изменение суммы</span><span style="font-size:13px;color:#B3050F">+ 26 000 UZS</span></div>
+    </div>
+
+    <div style="background:#FFF0F0;color:#B3050F;border-radius:10px;padding:11px;font-size:12px;line-height:1.6;margin-bottom:10px"><i class="ti ti-alert-triangle"></i> <b>Правило не определено:</b> заказ уже оплачен онлайн, а замена дороже на 26 000 UZS. Кто и как доплачивает — в SRS не описано (см. пробел в BR-21 / FR-6.9)</div>
+
+    <div style="background:#FFF6E5;color:#854F0B;border-radius:10px;padding:11px;font-size:12px;line-height:1.6"><i class="ti ti-info-circle"></i> Ручной ввод суммы недоступен — итог пересчитывает система. Это альтернативная ветка: товарный чек SO-04 показан для базового сценария без замены</div>
+  </div>
+  <div class="ft"><button class="btn" style="margin-bottom:8px" data-go="SO-02">Отправить клиенту на подтверждение</button><button class="btn btng" data-go="SO-02">Отмена</button></div>
+</div>
+
+<div class="sc" id="SO-04" data-name="SO-04 · Товарный чек">
+  <div class="sb"><span>16:31</span><span><i class="ti ti-wifi"></i> <i class="ti ti-battery-3"></i></span></div>
+  <div class="hd"><div class="row"><span data-go="SO-02" style="cursor:pointer"><i class="ti ti-chevron-left" style="font-size:21px"></i></span><span>Товарный чек</span><span style="width:21px"></span></div></div>
+  <div class="bd">
+    <div class="card" style="background:#E7F4E4">
+      <div class="row"><div><div style="font-size:14px;font-weight:600;color:#2F6B22">Заказ упакован</div><div style="font-size:11px;color:#2F6B22;opacity:.85">сборка заняла 6:41 — в норме</div></div><i class="ti ti-circle-check" style="font-size:26px;color:#2F6B22"></i></div>
+    </div>
+
+    <div class="rcp">
+      ROZMART · филиал SAMPI<br>
+      Товарный чек к заказу<br>
+      ────────────────────────────<br>
+      Заказ:      RB-8297<br>
+      Дата:       19.08.2026 16:31<br>
+      Оператор:   Дилноза А.<br>
+      ────────────────────────────<br>
+      Сервелат копчёный 600 г<br>
+      &nbsp;&nbsp;2 × 75 000 = 150 000<br>
+      Докторская варёная 455 г<br>
+      &nbsp;&nbsp;1 × 42 000 = 42 000<br>
+      Сосиски молочные 400 г<br>
+      &nbsp;&nbsp;1 × 32 000 = 32 000<br>
+      ────────────────────────────<br>
+      Товары:            224 000<br>
+      Доставка:           12 000<br>
+      Скидка ROZ10:     − 22 400<br>
+      <b>ИТОГО:            213 600 UZS</b><br>
+      ────────────────────────────<br>
+      Оплата:  онлайн (оплачен)<br>
+      ────────────────────────────<br>
+      Клиент:  Азизов Санжар<br>
+      Тел.:    +998 90 123 45 67<br>
+      Адрес:   Юнусабадский р-н,<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ул. Амира Темура 45,<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; кв. 12<br>
+      Время:   сегодня 16:00–18:00<br>
+      ────────────────────────────<br>
+      Не является фискальным чеком
+    </div>
+
+    <div class="mut" style="font-size:11px;text-align:center;line-height:1.6;margin-top:12px">Чек передаётся курьеру вместе с заказом</div>
+  </div>
+  <div class="ft"><button class="btn" style="margin-bottom:8px"><i class="ti ti-printer"></i> Печать чека</button><button class="btn btn2" data-go="SO-01">Передать курьеру</button></div>
+</div>
+
+<div class="sc" id="SO-05" data-name="SO-05 · Отмена заказа оператором">
+  <div class="sb"><span>16:26</span><span><i class="ti ti-wifi"></i> <i class="ti ti-battery-3"></i></span></div>
+  <div class="hd"><div class="row"><span data-go="SO-02" style="cursor:pointer"><i class="ti ti-chevron-left" style="font-size:21px"></i></span><span>Отмена заказа</span><span style="width:21px"></span></div></div>
+  <div class="bd">
+    <div style="background:#FFF0F0;color:#B3050F;border-radius:12px;padding:13px;font-size:12.5px;line-height:1.6;margin-bottom:14px">
+      <i class="ti ti-alert-triangle"></i> Отмена заказа RB-8297 на сумму 213 600 UZS. Заказ оплачен онлайн — будет инициирован возврат средств клиенту.
+    </div>
+
+    <div class="mut" style="font-size:12px;margin-bottom:8px">Причина отмены — обязательно</div>
+    <div class="opt"><div class="row"><span style="font-size:14px">Клиент отказался при доставке</span><i class="ti ti-circle" style="font-size:20px;color:#D5D5D5"></i></div></div>
+    <div class="opt sel"><div class="row"><span style="font-size:14px">Клиент недоступен, лимит ожидания истёк</span><i class="ti ti-circle-check" style="font-size:20px;color:#E30613"></i></div></div>
+    <div class="opt"><div class="row"><span style="font-size:14px">Товара нет, замена не согласована</span><i class="ti ti-circle" style="font-size:20px;color:#D5D5D5"></i></div></div>
+    <div class="opt"><div class="row"><span style="font-size:14px">Ошибка при оформлении</span><i class="ti ti-circle" style="font-size:20px;color:#D5D5D5"></i></div></div>
+    <div class="opt"><div class="row"><span style="font-size:14px">Другая причина</span><i class="ti ti-circle" style="font-size:20px;color:#D5D5D5"></i></div></div>
+
+    <div class="mut" style="font-size:12px;margin:14px 0 6px">Комментарий</div>
+    <input class="inp" placeholder="Что произошло — коротко">
+
+    <div class="card" style="margin-top:14px;background:#F7F7F7">
+      <div class="row" style="margin-bottom:8px"><span class="mut" style="font-size:12px">Что произойдёт</span></div>
+      <div style="font-size:12.5px;line-height:1.7;color:#4A4A4A">
+        • Заказ перейдёт в статус «Отменён»<br>
+        • Клиент получит уведомление с причиной<br>
+        • Будет инициирован возврат 213 600 UZS<br>
+        • Начисленные бонусы аннулируются<br>
+        • Действие попадёт в журнал с вашим именем
+      </div>
+    </div>
+  </div>
+  <div class="ft"><button class="btn" style="margin-bottom:8px" data-go="SO-01">Подтвердить отмену</button><button class="btn btng" data-go="SO-02">Назад</button></div>
+</div>
+
+<div class="sc" id="SD-01" data-name="SD-01 · Мои заказы (курьер)">
+  <div class="sb sbd"><span>16:35</span><span><i class="ti ti-wifi"></i> <i class="ti ti-battery-3"></i></span></div>
+  <div class="hd hdd"><div class="row"><div><div style="font-size:16px;font-weight:600">Мои заказы</div><div style="font-size:11px;opacity:.8">Бахтиёр · смена до 18:00</div></div><i class="ti ti-refresh" style="font-size:19px"></i></div></div>
+  <div class="bd">
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <div style="flex:1;background:#fff;border-radius:10px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:600">2</div><div class="mut" style="font-size:11px">к доставке</div></div>
+      <div style="flex:1;background:#fff;border-radius:10px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:600;color:#2F6B22">5</div><div class="mut" style="font-size:11px">доставлено</div></div>
+      <div style="flex:1;background:#fff;border-radius:10px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:600;color:#E30613">96&nbsp;000</div><div class="mut" style="font-size:11px">наличных</div></div>
+    </div>
+
+    <div class="card" data-go="SD-02" style="cursor:pointer;border-left:4px solid #E30613">
+      <div class="row" style="margin-bottom:7px"><span style="font-size:15px;font-weight:600">RB-8297</span><span class="tag t-new">Забрать в магазине</span></div>
+      <div class="mut" style="font-size:12px;margin-bottom:8px">Юнусабад, Амира Темура 45, кв. 12</div>
+      <div class="row"><span class="mut" style="font-size:12px"><i class="ti ti-credit-card" style="color:#2F6B22"></i> Оплачен онлайн</span><span class="mut" style="font-size:11px">к 18:00</span></div>
+    </div>
+
+    <div class="card" style="border-left:4px solid #BA7517">
+      <div class="row" style="margin-bottom:7px"><span style="font-size:15px;font-weight:600">RB-8301</span><span class="tag t-work">В пути</span></div>
+      <div class="mut" style="font-size:12px;margin-bottom:8px">Юнусабад, Богишамол 12, кв. 43</div>
+      <div class="row"><span class="mut" style="font-size:12px"><i class="ti ti-cash" style="color:#854F0B"></i> Наличными · 96 000 UZS</span><span class="mut" style="font-size:11px">выехал 16:20</span></div>
+    </div>
+
+    <div class="card" style="opacity:.6">
+      <div class="row" style="margin-bottom:7px"><span style="font-size:15px;font-weight:600">RB-8288</span><span class="tag t-gray">Доставлен</span></div>
+      <div class="mut" style="font-size:12px">15:12 · оплачен онлайн · 84 000 UZS</div>
+    </div>
+  </div>
+</div>
+
+<div class="sc" id="SD-02" data-name="SD-02 · Карточка доставки">
+  <div class="sb sbd"><span>16:38</span><span><i class="ti ti-wifi"></i> <i class="ti ti-battery-3"></i></span></div>
+  <div class="hd hdd"><div class="row"><span data-go="SD-01" style="cursor:pointer"><i class="ti ti-chevron-left" style="font-size:21px"></i></span><span>Заказ RB-8297</span><span style="width:21px"></span></div></div>
+  <div class="bd">
+    <div class="card">
+      <div class="mut" style="font-size:12px;margin-bottom:6px">Адрес доставки</div>
+      <div style="font-size:15px;line-height:1.5;margin-bottom:12px">Юнусабадский р-н,<br>ул. Амира Темура 45, кв. 12</div>
+      <div class="row">
+        <div><div class="mut" style="font-size:12px">Азизов Санжар</div><div style="font-size:14px;color:#E30613;font-weight:500">+998 90 123 45 67</div></div>
+        <span style="width:44px;height:44px;border-radius:50%;background:#E30613;color:#fff;display:flex;align-items:center;justify-content:center"><i class="ti ti-phone" style="font-size:20px"></i></span>
+      </div>
+    </div>
+
+    <div class="card" style="background:#FFF6E5">
+      <div class="mut" style="font-size:12px;margin-bottom:4px;color:#854F0B">Комментарий клиента</div>
+      <div style="font-size:13px;line-height:1.55;color:#854F0B">Позвонить за 10 минут до приезда, домофон не работает</div>
+    </div>
+
+    <div class="card" style="background:#E7F4E4">
+      <div class="row"><div><div style="font-size:14px;font-weight:600;color:#2F6B22">Оплачен онлайн</div><div style="font-size:11px;color:#2F6B22;opacity:.85">деньги с клиента брать не нужно</div></div><div style="font-size:16px;font-weight:600;color:#2F6B22">213 600</div></div>
+    </div>
+
+    <div class="card">
+      <div class="mut" style="font-size:12px;margin-bottom:8px">Состав заказа · 4 позиции</div>
+      <div class="li"><div class="ph0" style="width:40px;height:40px"><img src="img/p-servelat.jpg" alt=""></div><div style="flex:1;font-size:13px">Сервелат копчёный · 600 г</div><span style="font-size:14px;font-weight:600">×2</span></div>
+      <div class="li"><div class="ph0" style="width:40px;height:40px"><img src="img/p-doktorskaya.jpg" alt=""></div><div style="flex:1;font-size:13px">Докторская варёная · 455 г</div><span style="font-size:14px;font-weight:600">×1</span></div>
+      <div class="li"><div class="ph0" style="width:40px;height:40px"><img src="img/p-sos-molochnye.jpg" alt=""></div><div style="flex:1;font-size:13px">Сосиски молочные · 400 г</div><span style="font-size:14px;font-weight:600">×1</span></div>
+    </div>
+  </div>
+  <div class="ft"><button class="btn btn3" data-go="SD-03">Выехал к клиенту</button></div>
+</div>
+
+<div class="sc" id="SD-03" data-name="SD-03 · Управление статусами">
+  <div class="sb sbd"><span>16:52</span><span><i class="ti ti-wifi"></i> <i class="ti ti-battery-3"></i></span></div>
+  <div class="hd hdd"><div class="row"><span data-go="SD-02" style="cursor:pointer"><i class="ti ti-chevron-left" style="font-size:21px"></i></span><span>Заказ RB-8297</span><span style="width:21px"></span></div></div>
+  <div class="bd">
+    <div class="card" style="background:#1E1E1E;color:#fff">
+      <div style="font-size:16px;font-weight:600;margin-bottom:3px">Заказ в пути</div>
+      <div style="font-size:12px;opacity:.8">Выехал в 16:38 · клиент уведомлён</div>
+    </div>
+
+    <div class="card">
+      <div class="mut" style="font-size:12px;margin-bottom:10px">Ход доставки</div>
+      <div style="display:flex;gap:11px;margin-bottom:12px"><div style="width:22px;height:22px;border-radius:50%;background:#2F6B22;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;flex:none"><i class="ti ti-check"></i></div><div><div style="font-size:13px">Заказ получен в магазине</div><div class="mut" style="font-size:11px">16:33</div></div></div>
+      <div style="display:flex;gap:11px;margin-bottom:12px"><div style="width:22px;height:22px;border-radius:50%;background:#2F6B22;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;flex:none"><i class="ti ti-check"></i></div><div><div style="font-size:13px;font-weight:600">Выехал к клиенту</div><div class="mut" style="font-size:11px">16:38</div></div></div>
+      <div style="display:flex;gap:11px;opacity:.4"><div style="width:22px;height:22px;border-radius:50%;border:1.5px solid #D5D5D5;flex:none"></div><div><div style="font-size:13px">Прибыл на адрес</div><div class="mut" style="font-size:11px">ожидается</div></div></div>
+    </div>
+
+    <button class="btn btn3" style="margin-bottom:10px" data-go="SD-04">Я прибыл на адрес</button>
+
+    <div class="card" style="border:1px solid #FFD9D9">
+      <div class="mut" style="font-size:12px;margin-bottom:9px">Если клиент не отвечает</div>
+      <button class="btn btn2" style="border-radius:10px;padding:12px;font-size:14px"><i class="ti ti-phone-off"></i> Клиент недоступен</button>
+      <div class="mut" style="font-size:11px;line-height:1.6;margin-top:9px">Клиент получит уведомление, что вы ожидаете. По истечении лимита ожидания заказ вернётся оператору для решения.</div>
+    </div>
+  </div>
+</div>
+
+<div class="sc" id="SD-04" data-name="SD-04 · Приём оплаты и завершение">
+  <div class="sb sbd"><span>17:01</span><span><i class="ti ti-wifi"></i> <i class="ti ti-battery-3"></i></span></div>
+  <div class="hd hdd"><div class="row"><span data-go="SD-03" style="cursor:pointer"><i class="ti ti-chevron-left" style="font-size:21px"></i></span><span>Передача заказа</span><span style="width:21px"></span></div></div>
+  <div class="bd">
+    <div class="card" style="background:#E7F4E4"><div class="row"><div><div style="font-size:14px;font-weight:600;color:#2F6B22">Вы прибыли</div><div style="font-size:11px;color:#2F6B22;opacity:.85">клиент уведомлён в 16:57</div></div><i class="ti ti-map-pin-check" style="font-size:26px;color:#2F6B22"></i></div></div>
+
+    <div class="card">
+      <div class="mut" style="font-size:12px;margin-bottom:10px">Заказ RB-8297 · оплачен онлайн</div>
+      <div style="background:#F7F7F7;border-radius:10px;padding:13px;text-align:center">
+        <div style="font-size:13px;color:#2F6B22;font-weight:500"><i class="ti ti-circle-check"></i> Деньги брать не нужно</div>
+        <div class="mut" style="font-size:11px;margin-top:4px">Оплачено 213 600 UZS через Payme</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="mut" style="font-size:12px;margin-bottom:10px">Если оплата наличными — так выглядит блок приёма денег</div>
+      <div style="border:1px solid #E8E8E8;border-radius:10px;padding:13px">
+        <div class="row" style="margin-bottom:10px"><span style="font-size:14px">К получению</span><span class="prc" style="font-size:19px">96 000 UZS</span></div>
+        <div class="mut" style="font-size:12px;margin-bottom:6px">Получено от клиента</div>
+        <input class="inp" value="96 000" style="margin-bottom:10px">
+        <button class="btn" style="border-radius:10px;padding:12px;font-size:14px">Подтвердить приём наличных</button>
+      </div>
+    </div>
+
+    <div class="card" style="background:#F7F7F7">
+      <div class="mut" style="font-size:12px;margin-bottom:6px">Клиент подтверждает получение со своей стороны</div>
+      <div class="row"><span style="font-size:13px"><i class="ti ti-clock" style="color:#854F0B"></i> Ожидается подтверждение клиента</span></div>
+    </div>
+  </div>
+  <div class="ft"><button class="btn btn3" data-go="SD-01">Заказ доставлен</button></div>
+</div>
+
+</div>
+
+<div class="cap" id="cap"></div>
+
+<div class="hint">
+  <b>Что показано</b><br>
+  Экраны оператора — красная шапка, экраны курьера — тёмная, чтобы роли не путались при обсуждении.
+  Таймер сборки меняет цвет: зелёный до 5 минут, жёлтый 5–8, красный свыше 8 при нормативе 10 минут.<br>
+  <b>Открытые вопросы, видимые на экранах:</b> лимит ожидания недоступного клиента (SD-03) и порядок сдачи
+  наличных в кассу (SD-04, модуль M15) пока не определены заказчиком.<br>
+  Навигация: чипсы сверху, кнопки внутри экранов, стрелки ← → на клавиатуре.
+</div>
+
+</div>
+
+<script>
+(function(){
+  var scr=[].slice.call(document.querySelectorAll('.sc'));
+  var chips=[].slice.call(document.querySelectorAll('.chip'));
+  var cap=document.getElementById('cap');
+  function go(id){
+    scr.forEach(function(s){s.classList.toggle('on',s.id===id);});
+    chips.forEach(function(c){c.classList.toggle('on',c.dataset.go===id);});
+    var a=document.getElementById(id);
+    if(a){cap.textContent=a.dataset.name;var b=a.querySelector('.bd');if(b)b.scrollTop=0;}
+  }
+  document.addEventListener('click',function(e){
+    var c=e.target.closest('.chk');
+    if(c){c.classList.toggle('on');c.innerHTML=c.classList.contains('on')?'<i class="ti ti-check"></i>':'';return;}
+    var o=e.target.closest('.opt');
+    if(o){
+      var box=o.parentNode;
+      [].slice.call(box.querySelectorAll('.opt')).forEach(function(x){
+        x.classList.remove('sel');
+        var i=x.querySelector('i.ti');
+        if(i){i.className='ti ti-circle';i.style.color='#D5D5D5';}
+      });
+      o.classList.add('sel');
+      var i2=o.querySelector('i.ti');
+      if(i2){i2.className='ti ti-circle-check';i2.style.color='#E30613';}
+      return;
+    }
+    var t=e.target.closest('[data-go]');
+    if(t){go(t.dataset.go);}
+  });
+  document.addEventListener('keydown',function(e){
+    var ids=scr.map(function(s){return s.id;});
+    var cur=ids.indexOf(document.querySelector('.sc.on').id);
+    if(e.key==='ArrowRight'&&cur<ids.length-1)go(ids[cur+1]);
+    if(e.key==='ArrowLeft'&&cur>0)go(ids[cur-1]);
+  });
+  go('SO-01');
+})();
+</script>
+</body>
+</html>

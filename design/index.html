@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ROZMART — прототип клиентской части</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#EDEDED;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;color:#111}
+.wrap{max-width:1180px;margin:0 auto;padding:26px 18px 50px}
+.top{text-align:center;margin-bottom:18px}
+.top h1{font-size:23px;font-weight:700;margin:0 0 4px;color:#E30613;letter-spacing:.4px}
+.top p{margin:0;font-size:13px;color:#6E6E6E}
+.chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:18px 0 22px}
+.chip{border:1px solid #DADADA;background:#fff;border-radius:20px;padding:6px 12px;font-size:12px;cursor:pointer;color:#5A5A5A;user-select:none}
+.chip:hover{border-color:#E30613;color:#E30613}
+.chip.on{background:#E30613;color:#fff;border-color:#E30613}
+.ph{width:430px;height:900px;background:#0d0d0d;border-radius:56px;padding:12px;position:relative;margin:0 auto;box-shadow:0 18px 50px rgba(0,0,0,.28)}
+.sc{position:absolute;inset:12px;border-radius:44px;overflow:hidden;background:#F5F5F5;display:none;flex-direction:column}
+.sc.on{display:flex}
+.di{position:absolute;top:24px;left:50%;transform:translateX(-50%);width:116px;height:32px;background:#0d0d0d;border-radius:20px;z-index:9}
+.sb{height:56px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 6px;font-size:14px;font-weight:500;flex:none;background:#fff}
+.sbr{background:#E30613;color:#fff}
+.hd{background:#E30613;color:#fff;padding:13px 18px;flex:none;font-size:16px;font-weight:500}
+.hw{background:#fff;padding:10px 18px 14px;flex:none;border-bottom:1px solid #ECECEC}
+.bd{flex:1;overflow:auto;padding:14px 16px;background:#F5F5F5}
+.bd::-webkit-scrollbar{width:0}
+.ft{flex:none;padding:12px 16px 24px;border-top:1px solid #E8E8E8;background:#fff}
+.btn{width:100%;background:#E30613;color:#fff;border:none;border-radius:30px;padding:15px;font-size:15px;font-weight:500;cursor:pointer;font-family:inherit}
+.btn:active{background:#C1050F}
+.btn2{background:#fff;color:#E30613;border:1px solid #E30613}
+.card{background:#fff;border-radius:14px;padding:13px;margin-bottom:10px}
+.row{display:flex;justify-content:space-between;align-items:center}
+.mut{color:#7A7A7A;font-size:13px}
+.prc{color:#E30613;font-weight:600}
+.inp{width:100%;background:#fff;border:1px solid #E8E8E8;border-radius:12px;padding:13px;font-size:14px;font-family:inherit;color:#111}
+.cov{background:#fff;border-radius:14px;height:150px;position:relative;overflow:hidden;padding:10px;cursor:pointer;display:flex;flex-direction:column;justify-content:flex-end}
+.cov img{position:absolute;top:8px;left:8px;right:8px;height:98px;width:calc(100% - 16px);object-fit:contain}
+.cov span{font-size:14px;font-weight:600;line-height:1.25;position:relative;z-index:2}
+.cov .n{position:absolute;top:10px;right:12px;font-size:11px;color:#A8A8A8;z-index:2}
+.dash{width:26px;height:4px;background:#E30613;border-radius:2px;margin-top:6px;position:relative;z-index:2}
+.ph0{background:#fff;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#C8C8C8;position:relative;overflow:hidden}
+.ph0 img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:4px}
+.nb{display:flex;justify-content:space-around;padding:9px 0 22px;border-top:1px solid #E8E8E8;background:#fff;flex:none;font-size:10px;text-align:center;color:#8A8A8A}
+.nb div{cursor:pointer}
+.nb .ac{color:#E30613}
+.st{display:flex;gap:11px;margin-bottom:14px}
+.dot{width:22px;height:22px;border-radius:50%;border:1.5px solid #D5D5D5;flex:none;display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff}
+.dot.dn{background:#E30613;border-color:#E30613}
+.qb{width:27px;height:27px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.cap{text-align:center;margin-top:16px;font-size:13px;color:#6E6E6E}
+.hint{max-width:620px;margin:24px auto 0;background:#fff;border:1px solid #E2E2E2;border-radius:12px;padding:14px 18px;font-size:12.5px;line-height:1.7;color:#5A5A5A}
+.hint b{color:#111}
+.hint code{background:#F3F3F3;padding:1px 5px;border-radius:4px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="top">
+  <h1>ROZMART</h1>
+  <p>Кликабельный прототип клиентской части · Telegram Mini App · iPhone 15 Pro Max</p>
+</div>
+
+<div style="display:flex;gap:8px;justify-content:center;margin-bottom:6px">
+  <span style="background:#E30613;color:#fff;border:1px solid #E30613;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:500">Клиент · 12 экранов</span>
+  <a href="staff.html" style="background:#fff;color:#5A5A5A;border:1px solid #DADADA;border-radius:8px;padding:8px 16px;font-size:13px;text-decoration:none">Оператор и курьер · 9</a>
+  <a href="admin.html" style="background:#fff;color:#5A5A5A;border:1px solid #DADADA;border-radius:8px;padding:8px 16px;font-size:13px;text-decoration:none">Админ-панель · 9</a>
+</div>
+
+<div class="chips">
+  <span class="chip" data-go="SC-01">01 Регистрация</span>
+  <span class="chip" data-go="SC-02">02 Главная</span>
+  <span class="chip" data-go="SC-03">03 Товар</span>
+  <span class="chip" data-go="SC-04">04 Корзина</span>
+  <span class="chip" data-go="SC-05">05 Оформление</span>
+  <span class="chip" data-go="SC-06">06 Оплата</span>
+  <span class="chip" data-go="SC-07">07 Принят</span>
+  <span class="chip" data-go="SC-08">08 Статус</span>
+  <span class="chip" data-go="SC-09">09 Получение</span>
+  <span class="chip" data-go="SC-10">10 Отзыв</span>
+  <span class="chip" data-go="SC-11">11 Профиль</span>
+  <span class="chip" data-go="SC-12">12 История</span>
+</div>
+
+<div class="ph">
+<div class="di"></div>
+
+<div class="sc" id="SC-01" data-name="SC-01 · Регистрация">
+  <div class="sb"><span>10:09</span><span><i class="ti ti-wifi"></i> <i class="ti ti-battery-3"></i></span></div>
+  <div class="bd" style="padding-top:26px">
+    <div style="font-size:30px;font-weight:700;color:#E30613;letter-spacing:.5px;margin-bottom:4px">ROZMART</div>
+    <div class="mut" style="margin-bottom:20px">Продукция ROZMETOV с доставкой</div>
+    <div class="card" style="padding:16px">
+    <div style="font-size:21px;font-weight:600;margin-bottom:6px">Добро пожаловать</div>
+    <div class="mut" style="margin-bottom:22px;line-height:1.6">Заполните данные один раз — дальше заказы оформляются в пару касаний.</div>
+    <div class="mut" style="margin-bottom:6px">ФИО</div>
+    <input class="inp" value="Азизов Санжар" style="margin-bottom:14px">
+    <div class="mut" style="margin-bottom:6px">Номер телефона</div>
+    <div style="display:flex;align-items:center;gap:9px;border:1px solid #E8E8E8;border-radius:12px;padding:0 12px;margin-bottom:8px;background:#fff"><span style="font-size:17px">🇺🇿</span><input value="+998 90 123 45 67" style="flex:1;border:none;outline:none;padding:13px 0;font-size:14px;font-family:inherit"></div>
+    <div style="background:#FFF0F0;color:#B3050F;border-radius:10px;padding:11px;font-size:12px;margin-bottom:16px"><i class="ti ti-brand-telegram"></i> Поделиться номером из Telegram</div>
+    <div class="mut" style="margin-bottom:6px">Название точки / магазина <span style="opacity:.75">— необязательно</span></div>
+    <input class="inp" placeholder="Если закупаете для магазина">
+    </div>
+  </div>
+  <div class="ft"><button class="btn" data-go="SC-02">Зарегистрироваться</button></div>
+</div>
+
+<div class="sc" id="SC-02" data-name="SC-02 · Главная / Каталог">
+  <div class="sb"><span>10:09</span><span><i class="ti ti-wifi"></i> <i class="ti ti-battery-3"></i></span></div>
+  <div class="hw">
+    <div class="row" style="margin-bottom:11px"><div style="font-size:22px;font-weight:700;color:#E30613;letter-spacing:.4px">ROZMART</div><div class="mut" style="font-size:13px"><i class="ti ti-map-pin" style="color:#E30613"></i> Ташкент</div></div>
+    <div style="background:#F1F1F1;border-radius:24px;padding:11px 15px;font-size:13px;color:#8A8A8A"><i class="ti ti-search"></i> Найти продукты</div>
+  </div>
+  <div class="bd" id="cat-body">
+    <div style="font-size:19px;font-weight:600;margin-bottom:12px">Категории</div>
+    <div id="cats" style="display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:18px"></div>
+    <div style="background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:14px">
+      <div class="mut" style="font-size:11px;margin-bottom:7px">Вид каталога — для сравнения на обсуждении</div>
+      <div style="display:flex;gap:6px">
+        <span class="vw on" data-v="flat" style="flex:1;text-align:center;border:1px solid #E30613;border-radius:8px;padding:7px;font-size:11.5px;cursor:pointer">Каждая фасовка отдельно</span>
+        <span class="vw" data-v="grp" style="flex:1;text-align:center;border:1px solid #DADADA;border-radius:8px;padding:7px;font-size:11.5px;cursor:pointer;color:#7A7A7A">Выбор фасовки в товаре</span>
+      </div>
+    </div>
+    <div class="row" style="margin-bottom:11px"><div id="ttl" style="font-size:19px;font-weight:600">Все товары</div><span id="cnt" class="mut" style="font-size:13px"></span></div>
+    <div id="grid" style="display:grid;grid-template-columns:1fr 1fr;gap:11px"></div>
+  </div>
+  <div style="padding:11px 16px;background:#E30613;color:#fff;flex:none;cursor:pointer" data-go="SC-04"><div class="row"><div><div style="font-size:11px;opacity:.85">4 товара</div><div style="font-size:15px;font-weight:600">170 460 UZS</div></div><div style="font-size:14px">Корзина <i class="ti ti-arrow-right"></i></div></div></div>
+  <div class="nb"><div class="ac"><i class="ti ti-home" style="font-size:19px"></i><div>Главная</div></div><div><i class="ti ti-search" style="font-size:19px"></i><div>Каталог</div></div><div data-go="SC-04"><i class="ti ti-shopping-cart" style="font-size:19px"></i><div>Корзина</div></div><div data-go="SC-08"><i class="ti ti-receipt" style="font-size:19px"></i><div>Заказы</div></div><div data-go="SC-11"><i class="ti ti-user" style="font-size:19px"></i><div>Профиль</div></div></div>
+</div>
+
+<div class="sc" id="SC-03" data-name="SC-03 · Карточка товара">
+  <div class="sb sbr"><span>10:11</span><span><i class="ti ti-wifi"></i> <i class="ti ti-battery-3"></i></span></div>
+  <div class="hd"><div class="row"><span data-go="SC-02" style="cursor:pointer"><i class="ti ti-chevron-left" style="font-size:21px"></i></span><span>Детали товара</span><span><i class="ti ti-shopping-cart" style="font-size:20px"></i></span></div></div>
+  <div class="bd" id="pd"></div>
+  <div class="ft"><button class="btn" id="pd-add" data-go="SC-04">В корзину</button></div>
+</div>
+
+<div class="sc" id="SC-04" data-name="SC-04 · Корзина">
+  <div class="sb sbr"><span>10:14</span><span><i class="ti ti-wifi"></i> <i class="ti ti-battery-3"></i></span></div>
+  <div class="hd"><div class="row"><span data-go="SC-02" style="cursor:pointer"><i class="ti ti-chevron-left" style="font-size:21px"></i></span><span>Корзина</span><span style="width:21px"></span></div></div>
+  <div class="bd">
+    <div class="card" data-price="24990"><div style="display:flex;gap:11px;align-items:center"><div class="ph0" style="width:56px;height:56px;flex:none;background:#F7F7F7"><img src="img/p-000967.jpg" alt=""></div><div style="flex:1"><div style="font-size:13px;line-height:1.35">Асл Фарход копчёная в вакууме · 200 г</div><div class="prc" style="font-size:13px;margin-top:3px">24 990 UZS</div></div><div style="display:flex;align-items:center;gap:9px"><span class="qb qm" style="background:#F1F1F1"><i class="ti ti-minus" style="font-size:14px"></i></span><span class="qv" style="font-size:14px;min-width:12px;text-align:center">2</span><span class="qb qp" style="background:#E30613;color:#fff"><i class="ti ti-plus" style="font-size:14px"></i></span></div></div></div>
+    <div class="card" data-price="70490"><div style="display:flex;gap:11px;align-items:center"><div class="ph0" style="width:56px;height:56px;flex:none;background:#F7F7F7"><img src="img/p-000935.jpg" alt=""></div><div style="flex:1"><div style="font-size:13px;line-height:1.35">Егерские сосиски · 700 г</div><div class="prc" style="font-size:13px;margin-top:3px">70 490 UZS</div></div><div style="display:flex;align-items:center;gap:9px"><span class="qb qm" style="background:#F1F1F1"><i class="ti ti-minus" style="font-size:14px"></i></span><span class="qv" style="font-size:14px;min-width:12px;text-align:center">1</span><span class="qb qp" style="background:#E30613;color:#fff"><i class="ti ti-plus" style="font-size:14px"></i></span></div></div></div>
+    <div class="card" data-price="49990"><div style="display:flex;gap:11px;align-items:center"><div class="ph0" style="width:56px;height:56px;flex:none;background:#F7F7F7"><img src="img/p-005035.jpg" alt=""></div><div style="flex:1"><div style="font-size:13px;line-height:1.35">Экстра варёная · 455 г</div><div class="prc" style="font-size:13px;margin-top:3px">49 990 UZS</div></div><div style="display:flex;align-items:center;gap:9px"><span class="qb qm" style="background:#F1F1F1"><i class="ti ti-minus" style="font-size:14px"></i></span><span class="qv" style="font-size:14px;min-width:12px;text-align:center">1</span><span class="qb qp" style="background:#E30613;color:#fff"><i class="ti ti-plus" style="font-size:14px"></i></span></div></div></div>
+    <div class="card"><div class="row" style="margin-bottom:9px"><span class="mut">Товары</span><span id="c-goods" style="font-size:13px">170 460 UZS</span></div><div class="row" style="margin-bottom:11px"><span class="mut">Доставка</span><span style="font-size:13px">12 000 UZS</span></div><div class="row" style="border-top:1px solid #EDEDED;padding-top:11px"><span style="font-size:15px;font-weight:600">Итого</span><span id="c-total" class="prc" style="font-size:17px">182 460 UZS</span></div></div>
+    <div class="mut" style="font-size:12px;text-align:center;line-height:1.6"><i class="ti ti-info-circle"></i> Состав можно менять до нажатия «Оформить заказ»</div>
+  </div>
+  <div class="ft"><button class="btn" data-go="SC-05">Оформить заказ</button></div>
+</div>
+
+<div class="sc" id="SC-05" data-name="SC-05 · Оформление заказа">
+  <div class="sb sbr"><span>10:16</span><span><i class="ti ti-wifi"></i> <i class="ti ti-battery-3"></i></span></div>
+  <div class="hd"><div class="row"><span data-go="SC-04" style="cursor:pointer"><i class="ti ti-chevron-left" style="font-size:21px"></i></span><span>Оформление заказа</span><span style="width:21px"></span></div></div>
+  <div class="bd">
+    <div class="mut" style="margin-bottom:6px">Адрес доставки</div>
+    <input class="inp" value="Юнусабадский р-н, ул. Амира Темура 45, кв. 12" style="margin-bottom:8px">
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <span id="pin-btn" style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;border:1px solid #E30613;color:#E30613;background:#fff;border-radius:12px;padding:11px;font-size:13px;cursor:pointer"><i class="ti ti-map-pin"></i> Указать на карте</span>
+      <span id="geo-btn" style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;border:1px solid #DADADA;color:#5A5A5A;background:#fff;border-radius:12px;padding:11px;font-size:13px;cursor:pointer"><i class="ti ti-current-location"></i> Моё местоположение</span>
+    </div>
+    <div id="pin-map" style="display:none;margin-bottom:14px">
+      <div style="position:relative;height:150px;border-radius:12px;overflow:hidden;background:#E8EDE8;border:1px solid #E0E0E0">
+        <div style="position:absolute;inset:0;background:repeating-linear-gradient(0deg,#DCE3DC 0 1px,transparent 1px 26px),repeating-linear-gradient(90deg,#DCE3DC 0 1px,transparent 1px 26px)"></div>
+        <div style="position:absolute;left:18%;top:0;bottom:0;width:12px;background:#CFD8CF"></div>
+        <div style="position:absolute;top:58%;left:0;right:0;height:14px;background:#CFD8CF"></div>
+        <div style="position:absolute;left:50%;top:44%;transform:translate(-50%,-100%);color:#E30613;font-size:34px"><i class="ti ti-map-pin-filled"></i></div>
+        <div style="position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);width:10px;height:10px;border-radius:50%;background:rgba(227,6,19,.25)"></div>
+        <div style="position:absolute;right:10px;bottom:10px;background:#fff;border-radius:8px;padding:6px 10px;font-size:11px;color:#5A5A5A">Схема карты — в разработке будет Яндекс.Карты</div>
+      </div>
+      <div class="mut" style="font-size:12px;margin-top:8px;line-height:1.5">Перетащите метку на нужный подъезд — адрес подставится автоматически, курьер увидит точку на карте</div>
+    </div>
+    <div class="mut" style="margin-bottom:6px">Телефон</div>
+    <div style="display:flex;align-items:center;gap:9px;border:1px solid #E8E8E8;border-radius:12px;padding:0 12px;background:#fff;margin-bottom:16px"><span style="font-size:17px">🇺🇿</span><input value="+998 90 123 45 67" style="flex:1;border:none;outline:none;padding:13px 0;font-size:14px;font-family:inherit"></div>
+    <div class="mut" style="margin-bottom:8px">Время доставки</div>
+    <div class="card" style="padding:12px"><div class="row"><div><div style="font-size:14px">Как можно скорее</div><div class="mut" style="font-size:11px">60–90 минут</div></div><i class="ti ti-circle" style="font-size:20px;color:#D5D5D5"></i></div></div>
+    <div class="card" style="padding:12px;border:1.5px solid #E30613"><div class="row"><div><div style="font-size:14px">Сегодня вечером</div><div class="mut" style="font-size:11px">16:00 – 18:00</div></div><i class="ti ti-circle-check" style="font-size:20px;color:#E30613"></i></div></div>
+    <div class="mut" style="margin:14px 0 6px">Комментарий к заказу</div>
+    <input class="inp" placeholder="Например: позвонить за 10 минут" style="margin-bottom:14px">
+    <div class="mut" style="margin-bottom:6px">Промокод</div>
+    <div style="display:flex;gap:8px;margin-bottom:18px"><input class="inp" value="ROZ10" style="flex:1"><button class="btn" style="width:auto;padding:13px 20px;font-size:14px">ОК</button></div>
+    <div class="mut" style="margin-bottom:8px">Способ оплаты</div>
+    <div class="card" style="padding:12px;border:1.5px solid #E30613"><div class="row"><span style="font-size:14px"><i class="ti ti-credit-card" style="color:#E30613"></i> Онлайн · Payme</span><i class="ti ti-circle-check" style="font-size:20px;color:#E30613"></i></div></div>
+    <div class="card" style="padding:12px"><div class="row"><span style="font-size:14px"><i class="ti ti-cash" style="color:#E30613"></i> Наличными курьеру</span><i class="ti ti-circle" style="font-size:20px;color:#D5D5D5"></i></div></div>
+    <div class="card"><div class="row" style="margin-bottom:9px"><span class="mut">Товары (4)</span><span style="font-size:13px">170 460 UZS</span></div><div class="row" style="margin-bottom:9px"><span class="mut">Доставка</span><span style="font-size:13px">12 000 UZS</span></div><div class="row" style="margin-bottom:11px"><span class="mut">Скидка ROZ10</span><span style="font-size:13px;color:#3B6D11">− 17 046 UZS</span></div><div class="row" style="border-top:1px solid #EDEDED;padding-top:11px"><span style="font-size:15px;font-weight:600">К оплате</span><span class="prc" style="font-size:17px">165 414 UZS</span></div></div>
+  </div>
+  <div class="ft"><button class="btn" data-go="SC-06">Оплатить 165 414 UZS</button></div>
+</div>
+
+<div class="sc" id="SC-06" data-name="SC-06 · Оплата">
+  <div class="sb sbr"><span>10:17</span><span><i class="ti ti-wifi"></i> <i class="ti ti-battery-3"></i></span></div>
+  <div class="hd"><div class="row"><span data-go="SC-05" style="cursor:pointer"><i class="ti ti-chevron-left" style="font-size:21px"></i></span><span>Оплата</span><span style="width:21px"></span></div></div>
+  <div class="bd" style="display:flex;flex-direction:column;justify-content:center;text-align:center">
+    <div style="width:70px;height:70px;border-radius:22px;background:#FFF0F0;color:#E30613;display:flex;align-items:center;justify-content:center;font-size:32px;margin:0 auto 18px"><i class="ti ti-credit-card"></i></div>
+    <div style="font-size:19px;font-weight:600;margin-bottom:5px">Оплата через Payme</div>
+    <div class="mut" style="margin-bottom:22px">Заказ RB-8297 · Uzcard / Humo</div>
+    <div class="prc" style="font-size:31px;margin-bottom:26px">165 414 UZS</div>
+    <div class="card" style="text-align:left;background:#F7F7F7"><div class="mut" style="font-size:12px;margin-bottom:9px">Демонстрация двух исходов оплаты:</div><button class="btn" style="margin-bottom:9px" data-go="SC-07">Оплата прошла успешно</button><button class="btn btn2" id="pf">Оплата отклонена банком</button><div id="pfm" style="display:none;background:#FFF0F0;color:#B3050F;border-radius:10px;padding:12px;font-size:12px;margin-top:11px;line-height:1.55">Оплата не прошла. Попробуйте снова или выберите оплату наличными. Осталось попыток: 2 из 3.</div></div>
+    <div class="mut" style="font-size:11px;margin-top:14px;line-height:1.6">Заказ уйдёт на сборку только после подтверждения платежа</div>
+  </div>
+</div>
+
+<div class="sc" id="SC-07" data-name="SC-07 · Заказ принят">
+  <div class="sb"><span>10:18</span><span><i class="ti ti-wifi"></i> <i class="ti ti-battery-3"></i></span></div>
+  <div class="bd" style="display:flex;flex-direction:column;justify-content:center;text-align:center">
+    <div style="width:82px;height:82px;border-radius:50%;background:#E30613;color:#fff;display:flex;align-items:center;justify-content:center;font-size:40px;margin:0 auto 20px"><i class="ti ti-check"></i></div>
+    <div style="font-size:23px;font-weight:600;margin-bottom:8px">Заказ принят</div>
+    <div class="mut" style="margin-bottom:22px;line-height:1.65">Мы уже собираем ваш заказ.<br>Курьер свяжется перед доставкой.</div>
+    <div class="card" style="background:#F7F7F7"><div class="mut" style="font-size:12px;margin-bottom:4px">Номер заказа</div><div style="font-size:21px;font-weight:600;letter-spacing:.6px">RB-8297</div></div>
+    <div class="card" style="text-align:left;background:#F7F7F7"><div class="row" style="margin-bottom:9px"><span class="mut">Состав</span><span style="font-size:13px">4 товара</span></div><div class="row" style="margin-bottom:9px"><span class="mut">Оплачено</span><span class="prc" style="font-size:13px">165 414 UZS</span></div><div class="row"><span class="mut">Доставка</span><span style="font-size:13px">сегодня 16:00–18:00</span></div></div>
+  </div>
+  <div class="ft"><button class="btn" style="margin-bottom:9px" data-go="SC-08">Отследить заказ</button><button class="btn btn2" data-go="SC-02">В каталог</button></div>
+</div>
+
+<div class="sc" id="SC-08" data-name="SC-08 · Статус заказа">
+  <div class="sb sbr"><span>16:41</span><span><i class="ti ti-wifi"></i> <i class="ti ti-battery-3"></i></span></div>
+  <div class="hd"><div class="row"><span data-go="SC-02" style="cursor:pointer"><i class="ti ti-chevron-left" style="font-size:21px"></i></span><span>Заказ RB-8297</span><span style="width:21px"></span></div></div>
+  <div class="bd">
+    <div class="card" style="background:#E30613;color:#fff"><div style="font-size:17px;font-weight:600;margin-bottom:3px">Заказ в пути</div><div style="font-size:12px;opacity:.85">Курьер выехал в 16:38</div></div>
+    <div class="card">
+      <div class="st"><div class="dot dn"><i class="ti ti-check"></i></div><div><div style="font-size:13px">Заказ принят</div><div class="mut" style="font-size:11px">10:18</div></div></div>
+      <div class="st"><div class="dot dn"><i class="ti ti-check"></i></div><div><div style="font-size:13px">Собираем заказ</div><div class="mut" style="font-size:11px">16:22</div></div></div>
+      <div class="st"><div class="dot dn"><i class="ti ti-check"></i></div><div><div style="font-size:13px">Заказ собран</div><div class="mut" style="font-size:11px">16:31</div></div></div>
+      <div class="st"><div class="dot dn"><i class="ti ti-check"></i></div><div><div style="font-size:13px;font-weight:600">Заказ в пути</div><div class="mut" style="font-size:11px">16:38</div></div></div>
+      <div class="st" style="margin-bottom:0;opacity:.4"><div class="dot"></div><div><div style="font-size:13px">Курьер прибыл</div><div class="mut" style="font-size:11px">ожидается</div></div></div>
+    </div>
+    <div class="card"><div class="row" style="margin-bottom:9px"><span class="mut">Адрес</span><span style="font-size:13px;text-align:right;max-width:190px">ул. Амира Темура 45, кв. 12</span></div><div class="row"><span class="mut">Оплачено онлайн</span><span class="prc" style="font-size:13px">165 414 UZS</span></div></div>
+    <div class="card" style="opacity:.5"><div class="row"><span style="font-size:13px"><i class="ti ti-x"></i> Отменить заказ</span><span class="mut" style="font-size:11px">недоступно — заказ собран</span></div></div>
+    <div class="card"><div class="row"><span style="font-size:13px"><i class="ti ti-phone" style="color:#E30613"></i> Связаться с колл-центром</span><i class="ti ti-chevron-right" style="color:#B0B0B0"></i></div></div>
+  </div>
+  <div class="ft"><button class="btn" data-go="SC-09">Курьер прибыл →</button></div>
+</div>
+
+<div class="sc" id="SC-09" data-name="SC-09 · Подтверждение получения">
+  <div class="sb sbr"><span>16:57</span><span><i class="ti ti-wifi"></i> <i class="ti ti-battery-3"></i></span></div>
+  <div class="hd" style="text-align:center">Заказ RB-8297</div>
+  <div class="bd" style="display:flex;flex-direction:column;justify-content:center;text-align:center">
+    <div style="width:74px;height:74px;border-radius:50%;background:#FFF0F0;color:#E30613;display:flex;align-items:center;justify-content:center;font-size:34px;margin:0 auto 18px"><i class="ti ti-motorbike"></i></div>
+    <div style="font-size:21px;font-weight:600;margin-bottom:8px">Курьер прибыл</div>
+    <div class="mut" style="margin-bottom:20px;line-height:1.65">Пожалуйста, встретьте курьера<br>и проверьте товар при получении</div>
+    <div class="card" style="text-align:left;background:#F7F7F7"><div class="row"><div style="display:flex;gap:11px;align-items:center"><div style="width:42px;height:42px;border-radius:50%;background:#E30613;color:#fff;display:flex;align-items:center;justify-content:center"><i class="ti ti-user"></i></div><div><div style="font-size:14px">Бахтиёр</div><div class="mut" style="font-size:11px">курьер</div></div></div><span style="width:38px;height:38px;border-radius:50%;background:#E30613;color:#fff;display:flex;align-items:center;justify-content:center"><i class="ti ti-phone" style="font-size:18px"></i></span></div></div>
+    <div style="background:#FFF6E5;color:#854F0B;border-radius:12px;padding:13px;font-size:12px;line-height:1.6;text-align:left"><i class="ti ti-alert-circle"></i> Проверьте состав и качество товара до ухода курьера — после этого претензии рассматриваются через колл-центр.</div>
+  </div>
+  <div class="ft"><button class="btn" data-go="SC-10">Подтверждаю получение</button></div>
+</div>
+
+<div class="sc" id="SC-10" data-name="SC-10 · Отзыв о заказе">
+  <div class="sb"><span>17:02</span><span><i class="ti ti-wifi"></i> <i class="ti ti-battery-3"></i></span></div>
+  <div class="bd" style="display:flex;flex-direction:column;justify-content:center;text-align:center">
+    <div style="width:74px;height:74px;border-radius:50%;background:#E30613;color:#fff;display:flex;align-items:center;justify-content:center;font-size:34px;margin:0 auto 18px"><i class="ti ti-checkbox"></i></div>
+    <div style="font-size:21px;font-weight:600;margin-bottom:6px">Заказ доставлен</div>
+    <div class="mut" style="margin-bottom:10px">Спасибо за покупку!</div>
+    <div style="background:#FFF0F0;color:#B3050F;border-radius:12px;padding:12px;font-size:13px;margin-bottom:24px"><i class="ti ti-coins"></i> Начислено бонусов: 1 654 UZS</div>
+    <div style="font-size:15px;margin-bottom:14px">Оцените заказ</div>
+    <div id="stars" style="display:flex;justify-content:center;gap:13px;font-size:33px;color:#D5D5D5;margin-bottom:20px"><i class="ti ti-star" data-s="1" style="cursor:pointer"></i><i class="ti ti-star" data-s="2" style="cursor:pointer"></i><i class="ti ti-star" data-s="3" style="cursor:pointer"></i><i class="ti ti-star" data-s="4" style="cursor:pointer"></i><i class="ti ti-star" data-s="5" style="cursor:pointer"></i></div>
+    <input class="inp" placeholder="Комментарий — необязательно">
+  </div>
+  <div class="ft"><button class="btn" style="margin-bottom:9px" data-go="SC-11">Отправить отзыв</button><button class="btn btn2" data-go="SC-02">Пропустить</button></div>
+</div>
+
+<div class="sc" id="SC-11" data-name="SC-11 · Профиль">
+  <div class="sb"><span>17:05</span><span><i class="ti ti-wifi"></i> <i class="ti ti-battery-3"></i></span></div>
+  <div class="bd">
+    <div style="text-align:center;font-size:20px;font-weight:600;margin:6px 0 20px">Профиль</div>
+    <div class="card" style="display:flex;gap:14px;align-items:center"><div style="width:66px;height:66px;border-radius:50%;background:#E30613;color:#fff;display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:600;flex:none">АС</div><div><div style="font-size:17px;font-weight:600;margin-bottom:3px">Азизов Санжар</div><div class="mut" style="font-size:13px"><span style="font-size:15px">🇺🇿</span> +998 90 123 45 67</div></div></div>
+    <div class="card" style="background:#F7F7F7"><div class="row"><span style="font-size:14px"><i class="ti ti-coins" style="color:#E30613;font-size:19px"></i> Бонусы: <b>17 136 UZS</b></span><button class="btn" style="width:auto;padding:9px 20px;font-size:13px">Потратить</button></div></div>
+    <div class="card" data-go="SC-12" style="cursor:pointer"><div class="row"><span style="font-size:14px"><i class="ti ti-receipt" style="color:#E30613;font-size:19px"></i> История заказов</span><i class="ti ti-chevron-right" style="color:#B0B0B0"></i></div></div>
+    <div class="card"><div class="row"><span style="font-size:14px"><i class="ti ti-map-pin" style="color:#E30613;font-size:19px"></i> Мои адреса</span><i class="ti ti-chevron-right" style="color:#B0B0B0"></i></div></div>
+    <div class="card"><div class="row"><span style="font-size:14px"><i class="ti ti-heart" style="color:#E30613;font-size:19px"></i> Избранные товары</span><i class="ti ti-chevron-right" style="color:#B0B0B0"></i></div></div>
+    <div class="card"><div class="row"><span style="font-size:14px"><i class="ti ti-message-dots" style="color:#E30613;font-size:19px"></i> Служба поддержки</span><i class="ti ti-chevron-right" style="color:#B0B0B0"></i></div></div>
+    <div class="card"><div class="row"><span style="font-size:14px"><i class="ti ti-settings" style="color:#E30613;font-size:19px"></i> Настройки</span><i class="ti ti-chevron-right" style="color:#B0B0B0"></i></div></div>
+  </div>
+  <div class="nb"><div data-go="SC-02"><i class="ti ti-home" style="font-size:19px"></i><div>Главная</div></div><div><i class="ti ti-search" style="font-size:19px"></i><div>Каталог</div></div><div data-go="SC-04"><i class="ti ti-shopping-cart" style="font-size:19px"></i><div>Корзина</div></div><div data-go="SC-12"><i class="ti ti-receipt" style="font-size:19px"></i><div>Заказы</div></div><div class="ac"><i class="ti ti-user" style="font-size:19px"></i><div>Профиль</div></div></div>
+</div>
+
+<div class="sc" id="SC-12" data-name="SC-12 · История заказов">
+  <div class="sb sbr"><span>17:06</span><span><i class="ti ti-wifi"></i> <i class="ti ti-battery-3"></i></span></div>
+  <div class="hd"><div class="row"><span data-go="SC-11" style="cursor:pointer"><i class="ti ti-chevron-left" style="font-size:21px"></i></span><span>История заказов</span><span style="width:21px"></span></div></div>
+  <div class="bd">
+    <div class="card"><div class="row" style="margin-bottom:8px"><span style="font-size:15px;font-weight:600">RB-8297</span><span style="background:#FFF0F0;color:#B3050F;border-radius:20px;padding:4px 11px;font-size:11px">Доставлен</span></div><div class="mut" style="font-size:12px;margin-bottom:9px">19 августа · 4 товара · <span class="prc">165 414 UZS</span></div><div class="row" style="border-top:1px solid #EDEDED;padding-top:10px"><span style="font-size:13px;color:#E30613;cursor:pointer" data-go="SC-04"><i class="ti ti-refresh"></i> Повторить заказ</span><i class="ti ti-chevron-right" style="color:#B0B0B0"></i></div></div>
+    <div class="card"><div class="row" style="margin-bottom:8px"><span style="font-size:15px;font-weight:600">RB-8104</span><span style="background:#FFF0F0;color:#B3050F;border-radius:20px;padding:4px 11px;font-size:11px">Доставлен</span></div><div class="mut" style="font-size:12px;margin-bottom:9px">12 августа · 6 товаров · <span class="prc">310 000 UZS</span></div><div class="row" style="border-top:1px solid #EDEDED;padding-top:10px"><span style="font-size:13px;color:#E30613;cursor:pointer" data-go="SC-04"><i class="ti ti-refresh"></i> Повторить заказ</span><i class="ti ti-chevron-right" style="color:#B0B0B0"></i></div></div>
+    <div class="card"><div class="row" style="margin-bottom:8px"><span style="font-size:15px;font-weight:600">RB-7982</span><span style="background:#F1F1F1;color:#5F5E5A;border-radius:20px;padding:4px 11px;font-size:11px">Отменён</span></div><div class="mut" style="font-size:12px;margin-bottom:9px">5 августа · 2 товара · 68 000 UZS</div><div class="mut" style="font-size:11px;border-top:1px solid #EDEDED;padding-top:10px;line-height:1.5">Отменён клиентом до начала сборки · средства возвращены</div></div>
+  </div>
+  <div class="nb"><div data-go="SC-02"><i class="ti ti-home" style="font-size:19px"></i><div>Главная</div></div><div><i class="ti ti-search" style="font-size:19px"></i><div>Каталог</div></div><div data-go="SC-04"><i class="ti ti-shopping-cart" style="font-size:19px"></i><div>Корзина</div></div><div class="ac"><i class="ti ti-receipt" style="font-size:19px"></i><div>Заказы</div></div><div data-go="SC-11"><i class="ti ti-user" style="font-size:19px"></i><div>Профиль</div></div></div>
+</div>
+
+</div>
+
+<div class="cap" id="cap"></div>
+
+<div class="hint">
+  <b>О прототипе</b><br>
+  Каталог реальный: 55 штучных позиций ROZMETOV из учётной системы REGOS — состав первого запуска, утверждённый заказчиком. Фотографии из каталога на Google Диске, у 9 позиций фото пока нет.<br><b>Цены — средние цены продажи из отчёта REGOS</b>, не официальный прайс-лист.<br>Переключатель «Вид каталога» показывает два варианта подачи товара — для обсуждения.<br>
+  Навигация: кнопки внутри экранов, чипсы сверху, стрелки ← → на клавиатуре.
+  Чтобы заменить фото — положите файл с тем же именем в папку <code>img</code> и обновите страницу (F5).
+</div>
+
+</div>
+
+<script>
+(function(){
+  var scr=[].slice.call(document.querySelectorAll('.sc'));
+  var chips=[].slice.call(document.querySelectorAll('.chip'));
+  var cap=document.getElementById('cap');
+  function go(id){
+    scr.forEach(function(s){s.classList.toggle('on',s.id===id);});
+    chips.forEach(function(c){c.classList.toggle('on',c.dataset.go===id);});
+    var a=document.getElementById(id);
+    if(a){cap.textContent=a.dataset.name;var b=a.querySelector('.bd');if(b)b.scrollTop=0;}
+  }
+  function fmt(n){return n.toLocaleString('ru-RU').replace(/ /g,' ')+' UZS';}
+  function recalc(){
+    var sum=0;
+    [].slice.call(document.querySelectorAll('#SC-04 .card[data-price]')).forEach(function(c){
+      sum+=parseInt(c.dataset.price,10)*parseInt(c.querySelector('.qv').textContent,10);
+    });
+    document.getElementById('c-goods').textContent=fmt(sum);
+    document.getElementById('c-total').textContent=fmt(sum+12000);
+  }
+  document.addEventListener('click',function(e){
+    var pm=e.target.closest('.qm'),pp=e.target.closest('.qp');
+    if(pm||pp){
+      var card=(pm||pp).closest('.card');
+      var v=card.querySelector('.qv');
+      var n=parseInt(v.textContent,10)+(pp?1:-1);
+      if(n<1)n=1; v.textContent=n; recalc(); return;
+    }
+    if(e.target.closest('#pf')){document.getElementById('pfm').style.display='block';return;}
+    var st=e.target.closest('[data-s]');
+    if(st){
+      var k=parseInt(st.dataset.s,10);
+      [].slice.call(document.querySelectorAll('#stars [data-s]')).forEach(function(i){
+        i.style.color=(parseInt(i.dataset.s,10)<=k)?'#E30613':'#D5D5D5';
+      });
+      return;
+    }
+    var t=e.target.closest('[data-go]');
+    if(t){go(t.dataset.go);}
+  });
+  document.addEventListener('keydown',function(e){
+    var ids=scr.map(function(s){return s.id;});
+    var cur=ids.indexOf(document.querySelector('.sc.on').id);
+    if(e.key==='ArrowRight'&&cur<ids.length-1)go(ids[cur+1]);
+    if(e.key==='ArrowLeft'&&cur>0)go(ids[cur-1]);
+  });
+  go('SC-02');
+})();
+</script>
+
+<script id="catalog-data" type="application/json">[{"code": "000975", "cat": "Копчёная колбаса", "name": "Асл Фарход копчёная", "base": "Асл Фарход копчёная", "w": "600 г", "price": 67465, "photo": "img/p-000975.jpg", "qty": 21.0, "regos": "RZ P/K ASL FARHOD 600GR SHT"}, {"code": "000974", "cat": "Копчёная колбаса", "name": "Асл Фарход копчёная", "base": "Асл Фарход копчёная", "w": "500 г", "price": 59990, "photo": "img/p-000974.jpg", "qty": 11.0, "regos": "RZ P/K ASL FARHOD 500GR SHT"}, {"code": "000967", "cat": "Копчёная колбаса", "name": "Асл Фарход копчёная в вакууме", "base": "Асл Фарход копчёная в вакууме", "w": "200 г", "price": 24990, "photo": "img/p-000967.jpg", "qty": 34.0, "regos": "RZ P/K ASL FARHOD (VAK) 200GR SHT"}, {"code": "000969", "cat": "Копчёная колбаса", "name": "Асл Фарход копчёная в вакууме", "base": "Асл Фарход копчёная в вакууме", "w": "500 г", "price": 62990, "photo": "img/p-000969.jpg", "qty": 14.0, "regos": "RZ P/K ASL FARHOD (VAK) 500GR SHT"}, {"code": "000972", "cat": "Копчёная колбаса", "name": "Асл Фарход копчёная в вакууме", "base": "Асл Фарход копчёная в вакууме", "w": "600 г", "price": 75490, "photo": "img/p-000972.jpg", "qty": 8.0, "regos": "RZ P/K ASL FARHOD (VAK) 600GR SHT"}, {"code": "007915", "cat": "Копчёная колбаса", "name": "Асл Фарход копчёная в вакууме", "base": "Асл Фарход копчёная в вакууме", "w": "350 г", "price": 0, "photo": "", "qty": 0.0, "regos": "RZ P/K ASL FARHOD (VAK) 350GR SHT"}, {"code": "000950", "cat": "Копчёная колбаса", "name": "Выдержка Асл Фарход в вакууме", "base": "Выдержка Асл Фарход в вакууме", "w": "300 г", "price": 79990, "photo": "", "qty": 3.0, "regos": "RZ VIDERJ. ASL FARHOD V/U 300GR"}, {"code": "004003", "cat": "Копчёная колбаса", "name": "Сервелат копчёная", "base": "Сервелат копчёная", "w": "600 г", "price": 0, "photo": "img/p-004003.jpg", "qty": 0.0, "regos": "RZ P/K SERVELAT 600GR SHT"}, {"code": "003101", "cat": "Варёная колбаса", "name": "Докторская варёная", "base": "Докторская варёная", "w": "700 г", "price": 74990, "photo": "img/p-003101.jpg", "qty": 5.0, "regos": "RZ VAR. DOKTORSKAYA 700GR SHT"}, {"code": "004829", "cat": "Варёная колбаса", "name": "Докторская варёная", "base": "Докторская варёная", "w": "455 г", "price": 48990, "photo": "img/p-004829.jpg", "qty": 4.0, "regos": "RZ VAR. DOKTORSKAYA 455GR SHT"}, {"code": "004805", "cat": "Варёная колбаса", "name": "Докторская варёная", "base": "Докторская варёная", "w": "855 г", "price": 92790, "photo": "img/p-004805.jpg", "qty": 3.0, "regos": "RZ VAR. DOKTORSKAYA 855GR SHT"}, {"code": "003100", "cat": "Варёная колбаса", "name": "Докторская варёная", "base": "Докторская варёная", "w": "400 г", "price": 0, "photo": "img/p-003100.jpg", "qty": 0.0, "regos": "RZ VAR. DOKTORSKAYA 400GR SHT"}, {"code": "007937", "cat": "Варёная колбаса", "name": "Докторская особая Асл Фарход в вакууме", "base": "Докторская особая Асл Фарход в вакууме", "w": "855 г", "price": 0, "photo": "", "qty": 0.0, "regos": "RZ.VAR DOKTORSKAYA OSOBIY 855GR 1+1 ASL FARHOD 200 (VAK)"}, {"code": "002634", "cat": "Варёная колбаса", "name": "Докторская особая варёная", "base": "Докторская особая варёная", "w": "855 г", "price": 64483, "photo": "", "qty": 6.0, "regos": "RZ VAR. DOKTORSKAYA OSOBAYA 855GR SHT"}, {"code": "002910", "cat": "Варёная колбаса", "name": "Докторская особая варёная", "base": "Докторская особая варёная", "w": "455 г", "price": 39990, "photo": "", "qty": 5.0, "regos": "RZ VAR. DOKTORSKAYA OSOBAYA 455GR SHT"}, {"code": "003105", "cat": "Варёная колбаса", "name": "Молочная варёная", "base": "Молочная варёная", "w": "700 г", "price": 74990, "photo": "img/p-003105.jpg", "qty": 2.0, "regos": "RZ VAR. MOLOCHNAYA 700GR SHT"}, {"code": "006336", "cat": "Варёная колбаса", "name": "Молочная варёная", "base": "Молочная варёная", "w": "855 г", "price": 95990, "photo": "img/p-006336.jpg", "qty": 1.0, "regos": "RZ VAR. MOLOCHNAYA 855GR"}, {"code": "000861", "cat": "Варёная колбаса", "name": "Молочные варёная", "base": "Молочные варёная", "w": "455 г", "price": 48990, "photo": "img/p-000861.jpg", "qty": 4.0, "regos": "RZ VAR. MOLOCHNIE 455GR SHT"}, {"code": "005827", "cat": "Варёная колбаса", "name": "Телячья варёная", "base": "Телячья варёная", "w": "855 г", "price": 95990, "photo": "img/p-005827.jpg", "qty": 5.0, "regos": "RZ VAR. TELYACHYA 855GR SHT"}, {"code": "003103", "cat": "Варёная колбаса", "name": "Телячья варёная", "base": "Телячья варёная", "w": "700 г", "price": 74990, "photo": "img/p-003103.jpg", "qty": 3.0, "regos": "RZ VAR. TELYACHYA 700GR SHT"}, {"code": "000860", "cat": "Варёная колбаса", "name": "Телячья варёная", "base": "Телячья варёная", "w": "455 г", "price": 0, "photo": "img/p-000860.jpg", "qty": 0.0, "regos": "RZ VAR. TELYACHYA 455GR SHT"}, {"code": "003102", "cat": "Варёная колбаса", "name": "Телячья варёная", "base": "Телячья варёная", "w": "400 г", "price": 0, "photo": "img/p-003102.jpg", "qty": 0.0, "regos": "RZ VAR. TELYACHYA 400GR SHT"}, {"code": "001049", "cat": "Варёная колбаса", "name": "Экстра варёная", "base": "Экстра варёная", "w": "855 г", "price": 97990, "photo": "img/p-001049.jpg", "qty": 13.0, "regos": "RZ VAR. EKSTRA 855GR"}, {"code": "005035", "cat": "Варёная колбаса", "name": "Экстра варёная", "base": "Экстра варёная", "w": "455 г", "price": 49990, "photo": "img/p-005035.jpg", "qty": 7.0, "regos": "RZ VAR. EKSTRA 455GR"}, {"code": "003099", "cat": "Варёная колбаса", "name": "Экстра варёная", "base": "Экстра варёная", "w": "700 г", "price": 76990, "photo": "img/p-003099.jpg", "qty": 2.0, "regos": "RZ VAR. EKSTRA 700GR"}, {"code": "003098", "cat": "Варёная колбаса", "name": "Экстра варёная", "base": "Экстра варёная", "w": "400 г", "price": 0, "photo": "img/p-003098.jpg", "qty": 0.0, "regos": "RZ VAR. EKSTRA 400GR"}, {"code": "000981", "cat": "Сосиски", "name": "Говяжьи сосиски", "base": "Говяжьи сосиски", "w": "700 г", "price": 71490, "photo": "img/p-000981.jpg", "qty": 2.0, "regos": "RZ SOS. GOVYAJI (G/U) 700GR"}, {"code": "000979", "cat": "Сосиски", "name": "Говяжьи сосиски в вакууме", "base": "Говяжьи сосиски в вакууме", "w": "400 г", "price": 40990, "photo": "img/p-000979.jpg", "qty": 6.0, "regos": "RZ SOS. GOVYAJI (VAK) 400GR"}, {"code": "000978", "cat": "Сосиски", "name": "Детские сосиски", "base": "Детские сосиски", "w": "500 г", "price": 56990, "photo": "img/p-000978.jpg", "qty": 2.0, "regos": "RZ SOS. KIDS (G/U) 500GR"}, {"code": "000935", "cat": "Сосиски", "name": "Егерские сосиски", "base": "Егерские сосиски", "w": "700 г", "price": 70490, "photo": "img/p-000935.jpg", "qty": 13.0, "regos": "RZ SOS. EGERSKIE (G/U) 700GR"}, {"code": "000982", "cat": "Сосиски", "name": "Егерские сосиски в вакууме", "base": "Егерские сосиски в вакууме", "w": "400 г", "price": 41990, "photo": "img/p-000982.jpg", "qty": 5.0, "regos": "RZ SOS. EGERSKIE (VAK) 400GR"}, {"code": "005160", "cat": "Сосиски", "name": "Канадские с сыром сосиски в вакууме", "base": "Канадские с сыром сосиски в вакууме", "w": "400 г", "price": 32990, "photo": "img/p-005160.jpg", "qty": 1.0, "regos": "RZ SOS. KANADSKIY S SIROM (VAK) 400GR"}, {"code": "000984", "cat": "Сосиски", "name": "Канадские сосиски в вакууме", "base": "Канадские сосиски в вакууме", "w": "400 г", "price": 36990, "photo": "img/p-000984.jpg", "qty": 4.0, "regos": "RZ SOS. KANADSKIE (VAK) 400GR"}, {"code": "000991", "cat": "Сосиски", "name": "Молочные сосиски", "base": "Молочные сосиски", "w": "700 г", "price": 70490, "photo": "img/p-000991.jpg", "qty": 5.0, "regos": "RZ SOS. MOLOCHNIE (G/U) 700GR"}, {"code": "000988", "cat": "Сосиски", "name": "Молочные сосиски в вакууме", "base": "Молочные сосиски в вакууме", "w": "400 г", "price": 40990, "photo": "img/p-000988.jpg", "qty": 6.0, "regos": "RZ SOS. MOLOCHNIE (VAK) 400GR"}, {"code": "000962", "cat": "Сосиски", "name": "Охотничьи классик деликатес", "base": "Охотничьи классик деликатес", "w": "200 г", "price": 28990, "photo": "img/p-000962.jpg", "qty": 9.0, "regos": "RZ DEL. OXOTNICHI KLASSIK (G/U) 200GR SHT"}, {"code": "000965", "cat": "Сосиски", "name": "Охотничьи с сыром деликатес", "base": "Охотничьи с сыром деликатес", "w": "200 г", "price": 30990, "photo": "img/p-000965.jpg", "qty": 4.0, "regos": "RZ DEL. OXOTNICHI S SIROM (G/U) 200GR SHT"}, {"code": "000964", "cat": "Сосиски", "name": "Охотничьи чили деликатес", "base": "Охотничьи чили деликатес", "w": "200 г", "price": 28990, "photo": "img/p-000964.jpg", "qty": 3.0, "regos": "RZ DEL. OXOTNICHI CHILI (G/U) 200GR SHT"}, {"code": "000994", "cat": "Сосиски", "name": "Сардельки сосиски", "base": "Сардельки сосиски", "w": "600 г", "price": 69990, "photo": "", "qty": 1.0, "regos": "RZ SOS. SARDELKI (G/U) 600GR"}, {"code": "006080", "cat": "Сосиски", "name": "Сутлу сосиски", "base": "Сутлу сосиски", "w": "650 г", "price": 0, "photo": "img/p-006080.jpg", "qty": 0.0, "regos": "RZ SOS. SUTLU (G/U) 650GR"}, {"code": "000997", "cat": "Сосиски", "name": "Сырные сосиски", "base": "Сырные сосиски", "w": "700 г", "price": 76990, "photo": "img/p-000997.jpg", "qty": 4.0, "regos": "RZ SOS. SIRNIE (G/U) 700GR"}, {"code": "000995", "cat": "Сосиски", "name": "Сырные сосиски в вакууме", "base": "Сырные сосиски в вакууме", "w": "400 г", "price": 0, "photo": "img/p-000995.jpg", "qty": 0.0, "regos": "RZ SOS. SIRNIE (VAK) 400GR"}, {"code": "000941", "cat": "Сосиски", "name": "Телячьи сосиски", "base": "Телячьи сосиски", "w": "700 г", "price": 76990, "photo": "img/p-000941.jpg", "qty": 1.0, "regos": "RZ SOS. TELYACHI (G/U) 700GR"}, {"code": "000938", "cat": "Сосиски", "name": "Телячьи сосиски в вакууме", "base": "Телячьи сосиски в вакууме", "w": "400 г", "price": 44490, "photo": "img/p-000938.jpg", "qty": 3.0, "regos": "RZ SOS. TELYACHI (VAK) 400GR"}, {"code": "000956", "cat": "Деликатесы", "name": "Барбекю Бараньи", "base": "Барбекю Бараньи", "w": "600 г", "price": 0, "photo": "img/p-000956.jpg", "qty": 0.0, "regos": "RZ BARBEKYU BARANINI G/U 600GR"}, {"code": "003106", "cat": "Деликатесы", "name": "Барбекю Бараньи", "base": "Барбекю Бараньи", "w": "300 г", "price": 0, "photo": "img/p-003106.jpg", "qty": 0.0, "regos": "RZ BARBEKYU BARANINI G/U 300GR"}, {"code": "000958", "cat": "Деликатесы", "name": "Барбекю Говяжьи", "base": "Барбекю Говяжьи", "w": "600 г", "price": 103500, "photo": "img/p-000958.jpg", "qty": 2.0, "regos": "RZ BARBEKYU GOVYAJI G/U 600GR"}, {"code": "000957", "cat": "Деликатесы", "name": "Барбекю Говяжьи", "base": "Барбекю Говяжьи", "w": "300 г", "price": 0, "photo": "img/p-000957.jpg", "qty": 0.0, "regos": "RZ BARBEKYU GOVYAJI G/U 300GR"}, {"code": "000959", "cat": "Деликатесы", "name": "Барбекю Куриные", "base": "Барбекю Куриные", "w": "300 г", "price": 39000, "photo": "img/p-000959.jpg", "qty": 1.0, "regos": "RZ BARBEKYU KURINIE G/U 300GR"}, {"code": "000960", "cat": "Деликатесы", "name": "Барбекю Куриные", "base": "Барбекю Куриные", "w": "600 г", "price": 0, "photo": "img/p-000960.jpg", "qty": 0.0, "regos": "RZ BARBEKYU KURINIE G/U 600GR"}, {"code": "000961", "cat": "Деликатесы", "name": "Барбекю Сырные", "base": "Барбекю Сырные", "w": "600 г", "price": 0, "photo": "img/p-000961.jpg", "qty": 0.0, "regos": "RZ BARBEKYU SIRNIE G/U 600GR"}, {"code": "003107", "cat": "Деликатесы", "name": "Барбекю Сырные", "base": "Барбекю Сырные", "w": "300 г", "price": 0, "photo": "img/p-003107.jpg", "qty": 0.0, "regos": "RZ BARBEKYU SIRNIE G/U 300GR"}, {"code": "001628", "cat": "Деликатесы", "name": "Выдержка Аристократ в вакууме", "base": "Выдержка Аристократ в вакууме", "w": "340 г", "price": 88990, "photo": "", "qty": 6.0, "regos": "RZ VIDERJ. ARISTOKRAT (VAK) 340GR"}, {"code": "005091", "cat": "Деликатесы", "name": "Выдержка Мерос в вакууме", "base": "Выдержка Мерос в вакууме", "w": "340 г", "price": 76990, "photo": "", "qty": 4.0, "regos": "RZ VIDERJ. MEROS (VAK) 340GR"}, {"code": "004866", "cat": "Деликатесы", "name": "Куриный казы деликатес в вакууме", "base": "Куриный казы деликатес в вакууме", "w": "400 г", "price": 47990, "photo": "", "qty": 15.0, "regos": "RZ DEL. KURINIY KAZI (VAK) 400GR SHT"}]</script>
+<script>
+(function(){
+  var DATA=JSON.parse(document.getElementById('catalog-data').textContent);
+  var LBL={"Копчёная колбаса": "Копчёные колбасы", "Варёная колбаса": "Варёные колбасы", "Сосиски": "Сосиски", "Деликатесы": "Деликатесы"};
+  var CATS=["Копчёная колбаса", "Варёная колбаса", "Сосиски", "Деликатесы"];
+  var view='flat', curCat=null, curBase=null, pdQty=1;
+  function money(n){return n?n.toLocaleString('ru-RU').replace(/ /g,'\u00a0')+'\u00a0UZS':'цена уточняется';}
+  function ph(p){return p?'<img src="'+p+'" alt="">':'<i class="ti ti-photo" style="font-size:22px"></i>';}
+
+  function drawCats(){
+    var el=document.getElementById('cats'); if(!el) return;
+    el.innerHTML=CATS.map(function(c){
+      var list=DATA.filter(function(x){return x.cat===c;});
+      var cover=(list.find(function(x){return x.photo;})||{}).photo||'';
+      return '<div class="cov" data-cat="'+c+'">'+(cover?'<img src="'+cover+'" alt="">':'')+
+        '<span class="n">'+list.length+'</span><span>'+LBL[c]+'</span><div class="dash"></div></div>';
+    }).join('');
+  }
+  function drawGrid(){
+    var list=curCat?DATA.filter(function(x){return x.cat===curCat;}):DATA;
+    document.getElementById('ttl').textContent=curCat?LBL[curCat]:'Все товары';
+    var g=document.getElementById('grid');
+    if(view==='flat'){
+      document.getElementById('cnt').textContent=list.length+' позиций';
+      g.innerHTML=list.map(function(x){return card(x.photo,x.name,x.w,x.price,x.code,'');}).join('');
+    }else{
+      var seen={},groups=[];
+      list.forEach(function(x){ if(!seen[x.base]){seen[x.base]=[];groups.push(x.base);} seen[x.base].push(x); });
+      document.getElementById('cnt').textContent=groups.length+' товаров';
+      g.innerHTML=groups.map(function(b){
+        var v=seen[b], p=(v.find(function(x){return x.photo;})||v[0]).photo;
+        var pr=v.map(function(x){return x.price;}).filter(Boolean);
+        var sub=v.length>1?v.length+' фасовки: '+v.map(function(x){return x.w;}).join(', '):v[0].w;
+        return card(p,b,sub,pr.length?Math.min.apply(null,pr):0,v[0].code,v.length>1?'от ':'');
+      }).join('');
+    }
+  }
+  function card(photo,name,sub,price,code,pref){
+    return '<div class="card" style="margin:0;padding:9px" data-code="'+code+'">'+
+      '<div class="ph0" style="height:100px;margin-bottom:8px">'+ph(photo)+'</div>'+
+      '<div style="font-size:12.5px;line-height:1.35;min-height:34px">'+name+'</div>'+
+      '<div class="mut" style="font-size:11px;margin:3px 0 7px">'+sub+'</div>'+
+      '<div class="row"><span class="prc" style="font-size:13.5px">'+pref+money(price)+'</span>'+
+      '<span class="qb" style="background:#E30613;color:#fff"><i class="ti ti-plus" style="font-size:15px"></i></span></div></div>';
+  }
+  function drawProduct(code){
+    var it=DATA.filter(function(x){return x.code===code;})[0]; if(!it) return;
+    var fam=DATA.filter(function(x){return x.cat===it.cat&&x.base===it.base;});
+    curBase=it;
+    var opts=fam.length>1?('<div class="mut" style="font-size:12px;margin:16px 0 8px">Фасовка</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">'+fam.map(function(x,i){
+        return '<span class="wopt'+(x.code===code?' on':'')+'" data-code="'+x.code+'" style="border:1.5px solid '+
+          (x.code===code?'#E30613':'#E8E8E8')+';border-radius:10px;padding:9px 14px;font-size:13px;cursor:pointer;background:#fff">'+
+          x.w+'</span>';}).join('')+'</div>'):'';
+    document.getElementById('pd').innerHTML=
+      '<div class="ph0" style="height:230px;margin-bottom:16px;border-radius:14px">'+ph(it.photo)+'</div>'+
+      '<div class="card"><div style="font-size:19px;font-weight:600;line-height:1.3;margin-bottom:5px">'+it.name+'</div>'+
+      '<div class="row"><span class="mut">'+(it.w||'')+'</span><span class="prc" style="font-size:21px">'+money(it.price)+'</span></div>'+
+      opts+
+      '<div class="row" style="margin-top:16px"><span class="mut">Количество</span>'+
+      '<div style="display:flex;align-items:center;gap:14px">'+
+      '<span class="qb pdm" style="background:#F1F1F1"><i class="ti ti-minus" style="font-size:15px"></i></span>'+
+      '<span id="pd-qty" style="font-size:16px;min-width:14px;text-align:center">1</span>'+
+      '<span class="qb pdp" style="background:#E30613;color:#fff"><i class="ti ti-plus" style="font-size:15px"></i></span>'+
+      '</div></div></div>'+
+      '<div class="card" style="background:#F7F7F7"><div class="row" style="margin-bottom:9px"><span class="mut">Категория</span><span style="font-size:13px">'+LBL[it.cat]+'</span></div>'+
+      '<div class="row"><span class="mut">Состав и срок годности</span><span style="font-size:13px;color:#B0B0B0">уточняется</span></div></div>'+
+      (it.photo?'':'<div style="background:#FBE4E4;color:#B3050F;border-radius:10px;padding:11px;font-size:12px">Фотографии нет — нужна съёмка</div>');
+    pdQty=1; updAdd();
+  }
+  function updAdd(){
+    var b=document.getElementById('pd-add');
+    if(!b||!curBase) return;
+    b.textContent='В корзину'+(curBase.price?' · '+money(curBase.price*pdQty):'');
+  }
+  document.addEventListener('click',function(e){
+    var v=e.target.closest('.vw');
+    if(v){ view=v.dataset.v;
+      [].forEach.call(document.querySelectorAll('.vw'),function(s){
+        var on=s===v; s.classList.toggle('on',on);
+        s.style.borderColor=on?'#E30613':'#DADADA'; s.style.color=on?'#111':'#7A7A7A';});
+      drawGrid(); return; }
+    var c=e.target.closest('[data-cat]');
+    if(c){ curCat=(curCat===c.dataset.cat)?null:c.dataset.cat; drawGrid();
+      document.getElementById('grid').scrollIntoView({block:'nearest'}); return; }
+    if(e.target.closest('#pin-btn')){
+      var mp=document.getElementById('pin-map');
+      mp.style.display=(mp.style.display==='none')?'block':'none'; return;
+    }
+    if(e.target.closest('#geo-btn')){
+      var mp2=document.getElementById('pin-map');
+      mp2.style.display='block'; return;
+    }
+    var pm=e.target.closest('.pdm'), pp=e.target.closest('.pdp');
+    if(pm||pp){
+      pdQty=Math.max(1,pdQty+(pp?1:-1));
+      document.getElementById('pd-qty').textContent=pdQty;
+      updAdd(); return;
+    }
+    var w=e.target.closest('.wopt');
+    if(w){ drawProduct(w.dataset.code); return; }
+    var k=e.target.closest('[data-code]');
+    if(k && k.closest('#grid')){ drawProduct(k.dataset.code);
+      [].forEach.call(document.querySelectorAll('.sc'),function(s){s.classList.toggle('on',s.id==='SC-03');});
+      [].forEach.call(document.querySelectorAll('.chip'),function(x){x.classList.toggle('on',x.dataset.go==='SC-03');});
+      return; }
+  });
+  drawCats(); drawGrid(); drawProduct(DATA[0].code);
+})();
+</script>
+</body>
+</html>
