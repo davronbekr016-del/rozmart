@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ROZMART — администрирование</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#EDEDED;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;color:#111;font-size:14px}
+.app{display:flex;min-height:100vh}
+.side{width:220px;background:#FAFAFA;border-right:1px solid #ECECEC;flex:none;padding:16px 0;
+  display:flex;flex-direction:column}
+.brand{padding:0 18px 16px;border-bottom:1px solid #ECECEC;margin-bottom:12px}
+.brand .lg{font-size:19px;font-weight:700;color:#E30613;letter-spacing:.4px}
+.brand .sb{font-size:11px;color:#8A8A8A;margin-top:2px}
+.nav{display:flex;align-items:center;gap:10px;padding:11px 18px;font-size:13px;color:#4A4A4A;cursor:pointer;border-left:3px solid transparent}
+.nav:hover{background:#F2F2F2}
+.nav.on{background:#FFF0F0;color:#B3050F;border-left-color:#E30613;font-weight:500}
+.nav .cnt{margin-left:auto;font-size:11px;color:#B0B0B0}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;background:#fff}
+.bar{border-bottom:1px solid #ECECEC;padding:14px 22px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex:none}
+.bar h2{margin:0;font-size:17px;font-weight:600}
+.body{padding:18px 22px 40px;overflow:auto;flex:1}
+.tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.tab{padding:7px 14px;border-radius:20px;background:#F2F2F2;font-size:13px;cursor:pointer;border:none;color:#4A4A4A}
+.tab.on{background:#E30613;color:#fff}
+input,select,textarea{font:inherit;padding:9px 11px;border:1px solid #DDD;border-radius:8px;width:100%;background:#fff;color:#111}
+textarea{resize:vertical;min-height:70px}
+.search{max-width:320px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.card{border:1px solid #ECECEC;border-radius:12px;padding:12px;cursor:pointer;background:#fff;display:flex;gap:11px;align-items:flex-start}
+.card:hover{border-color:#E30613;box-shadow:0 2px 10px rgba(227,6,19,.08)}
+.card img,.ph{width:56px;height:56px;border-radius:8px;object-fit:cover;flex:none;background:#F2F2F2}
+.ph{display:flex;align-items:center;justify-content:center;color:#BBB;font-size:20px}
+.card .nm{font-weight:500;line-height:1.3;margin-bottom:4px;word-break:break-word}
+.meta{font-size:12px;color:#8A8A8A;line-height:1.5}
+.pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;margin-right:4px}
+.pill.ok{background:#E8F5E9;color:#2E7D32}
+.pill.no{background:#F2F2F2;color:#8A8A8A}
+.pill.warn{background:#FFF3E0;color:#E65100}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:10px 8px;border-bottom:1px solid #F0F0F0;font-size:13px}
+th{color:#8A8A8A;font-weight:500;font-size:12px}
+tr.row{cursor:pointer}
+tr.row:hover td{background:#FAFAFA}
+button.act{padding:9px 16px;border-radius:8px;border:none;background:#E30613;color:#fff;font-size:13px;cursor:pointer}
+button.act:disabled{background:#DDD;color:#999;cursor:not-allowed}
+button.ghost{background:#F2F2F2;color:#4A4A4A}
+button.act.blue{background:#1C64F2;color:#fff}
+button.act.blue:hover{background:#1A56DB}
+.ovl{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;z-index:10}
+.ovl.on{display:block}
+.pane{position:fixed;top:0;right:0;bottom:0;width:min(560px,100%);background:#fff;z-index:11;transform:translateX(100%);transition:transform .2s;display:flex;flex-direction:column}
+.pane.on{transform:none}
+.pane .bar{border-bottom:1px solid #ECECEC}
+.pane .body{padding:18px 22px 30px}
+.fld{margin-bottom:14px}
+.fld label{display:block;font-size:12px;color:#8A8A8A;margin-bottom:5px}
+.msg{padding:10px 14px;border-radius:8px;margin-bottom:14px;font-size:13px}
+.msg.err{background:#FFEBEE;color:#B3050F}
+.msg.ok{background:#E8F5E9;color:#2E7D32}
+.empty{text-align:center;color:#8A8A8A;padding:50px 20px}
+.foot{border-top:1px solid #ECECEC;padding:14px 22px;display:flex;gap:10px;flex:none}
+@media(max-width:760px){
+  .app{flex-direction:column}
+  .side{width:100%;display:flex;overflow-x:auto;padding:8px;gap:4px;border-right:none;border-bottom:1px solid #ECECEC}
+  .brand{display:none}
+  .side>div:last-child{margin-top:0;padding:0;display:flex;align-items:center}
+  .side>div:last-child #who{display:none}
+  .nav{border-left:none;border-radius:8px;white-space:nowrap;padding:9px 14px}
+  .nav.on{border-left:none}
+  .body{padding:14px}
+  .bar{padding:12px 14px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="side">
+    <div class="brand"><div class="lg">ROZMART</div><div class="sb">администрирование</div></div>
+    <div class="nav on" data-go="products">Товары <span class="cnt" id="cntProducts"></span></div>
+    <div class="nav" data-go="orders">Заказы <span class="cnt" id="cntOrders"></span></div>
+    <div class="nav" data-go="settings">Состав каталога</div>
+    <div style="margin-top:auto;padding:14px 18px 0">
+      <div class="meta" id="who" style="margin-bottom:8px"></div>
+      <button class="act ghost" id="logout" style="width:100%">Выйти</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="bar">
+      <h2 id="ttl">Категории и товары</h2>
+      <input class="search" id="q" placeholder="Поиск по названию или коду REGOS">
+    </div>
+    <div class="body">
+      <div id="msg"></div>
+
+      <div id="viewProducts">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+          <div class="tabs" style="margin:0">
+            <button class="tab on" data-status="new">Не разобранные</button>
+            <button class="tab" data-status="ready">Готовы к публикации</button>
+            <button class="tab" data-status="published">На витрине</button>
+            <button class="tab" data-status="all">Все</button>
+          </div>
+          <select id="catFilter" style="max-width:220px"></select>
+          <button class="act blue" id="reloadProducts">Обновить</button>
+          <span class="meta" id="productsAt"></span>
+        </div>
+        <div class="grid" id="products"></div>
+      </div>
+
+      <div id="viewSettings" hidden>
+        <h3 style="margin:0 0 4px;font-size:15px">Категории витрины</h3>
+        <p class="meta" style="margin:0 0 12px">Порядок задаёт, как категории идут в приложении.</p>
+        <div id="cats"></div>
+        <div style="display:flex;gap:8px;margin:12px 0 26px;max-width:460px">
+          <input id="newCat" placeholder="Новая категория">
+          <button class="act" id="addCat">Добавить</button>
+        </div>
+
+        <h3 style="margin:0 0 4px;font-size:15px">Отправка заказов в REGOS</h3>
+        <label style="display:flex;gap:9px;align-items:center;margin:0 0 6px;cursor:pointer">
+          <input type="checkbox" id="autoPush" style="width:auto">
+          <span>Отправлять автоматически сразу после оформления</span>
+        </label>
+        <p class="meta" id="autoNote" style="margin:0 0 6px"></p>
+        <p class="meta" style="margin:0 0 26px">Заказ уходит в REGOS со статусом «Утверждён»
+          и встаёт в очередь на приём. Кассу он занимает сам, когда кассир нажимает
+          «Принять» — назначать её заранее нельзя, иначе заказ пропадает из очереди.</p>
+
+        <h3 style="margin:0 0 4px;font-size:15px">Кому приходят заказы</h3>
+        <p class="meta" style="margin:0 0 12px">Каждый новый заказ и каждая отмена уходят
+          в отмеченные чаты — с телефоном и адресом покупателя. Бот служебный,
+          покупателям он ничего не пишет. Чтобы чат появился в списке, сотрудник
+          пишет боту <b id="botName">боту магазина</b> или добавляет его
+          в рабочую группу.</p>
+        <div id="chats" style="margin-bottom:26px"></div>
+
+        <h3 style="margin:0 0 4px;font-size:15px">Какие группы REGOS попадают в витрину</h3>
+        <p class="meta" style="margin:0 0 12px">Ничего не отмечено — приезжает весь каталог сети.
+          Рядом с группой указано, сколько её позиций уже заведено.</p>
+        <div id="groups" style="max-height:420px;overflow:auto;border:1px solid #ECECEC;border-radius:10px;padding:10px"></div>
+        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+          <button class="act" id="saveGroups">Сохранить состав</button>
+          <button class="act ghost" id="cleanup">Убрать лишнее из витрины</button>
+        </div>
+
+        <h3 style="margin:26px 0 4px;font-size:15px">Фотографии из REGOS</h3>
+        <p class="meta" style="margin:0 0 12px">Скачивает картинки для карточек,
+          у которых своей фотографии нет. Загруженные вручную не трогает:
+          они сняты под витрину, а в REGOS лежит то, что удобно кассиру.
+          Сама по себе, при синхронизации каталога, эта загрузка не идёт.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="act blue" id="photoCheck">Посмотреть, сколько найдётся</button>
+          <button class="act" id="photoPull">Загрузить фотографии</button>
+          <span class="meta" id="photoNote"></span>
+        </div>
+      </div>
+
+      <div id="viewOrders" hidden>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+          <div class="tabs" id="orderTabs" style="margin:0"></div>
+          <button class="act blue" id="reloadOrders">Обновить</button>
+          <span class="meta" id="ordersAt"></span>
+        </div>
+        <table><thead><tr>
+          <th>Номер</th><th>Когда</th><th>Покупатель</th><th>Позиций</th><th>Сумма</th><th>Состояние</th><th>REGOS</th>
+        </tr></thead><tbody id="orders"></tbody></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="ovl" id="ovl"></div>
+<div class="pane" id="pane">
+  <div class="bar"><h2 id="paneTtl"></h2><button class="act ghost" id="close">Закрыть</button></div>
+  <div class="body" id="paneBody"></div>
+  <div class="foot" id="paneFoot"></div>
+</div>
+
+<script src="/static/admin.js?v=__V__"></script>
+</body>
+</html>

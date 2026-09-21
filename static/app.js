@@ -21,6 +21,11 @@ const state = {
   slot: "Как можно скорее",
   payment: "cash",
   sending: false,     // защита от повторной отправки заказа
+  orders: [],         // загруженные заказы покупателя
+  point: { f: null, p: null },   // точка на карте: f — в заказе, p — в профиле
+  // адрес, который мы сами подставили в поле. Нужен, чтобы отличить его
+  // от набранного руками и не затереть чужой текст
+  filled: { f: "", p: "" },
 };
 
 // приложение сворачивают и открывают заново — корзина не должна пропадать
@@ -122,10 +127,36 @@ async function loadCatalog() {
     state.allProducts = products;   // по этому списку работает поиск, без запросов
 
     renderCategories();
-    renderProducts(products);
+    // список рисуем с оглядкой на то, что покупатель уже выбрал: при обновлении
+    // страницы он стоит в своей категории, и показывать ему весь каталог —
+    // значит терять место, на котором он был
+    showCurrentList();
   } catch (error) {
     fail("Не удалось загрузить каталог. Проверьте подключение к интернету.", error);
   }
+}
+
+/** Показывает то, что покупатель выбрал сейчас: категорию или поиск.
+ *
+ * Нужна там, где список перерисовывается не по его действию, а сам: после
+ * обновления каталога свайпом. Отдельного запроса по категории не делаем —
+ * товар приносит с собой category_id, и весь каталог уже в памяти.
+ */
+function showCurrentList() {
+  if (state.query) return search(state.query);
+
+  const category = state.categories.find((c) => c.id === state.categoryId);
+  if (state.categoryId !== null && !category) {
+    // категорию убрали из витрины, пока покупатель в ней стоял
+    state.categoryId = null;
+    renderCategories();
+  }
+  const products = state.categoryId === null
+    ? state.allProducts
+    : state.allProducts.filter((p) => p.category_id === state.categoryId);
+
+  el("list-title").textContent = category ? category.name : "Все товары";
+  renderProducts(products);
 }
 
 /** Лента категорий. Выбранная подсвечена, «Все» сбрасывает отбор. */
@@ -489,6 +520,11 @@ async function submitOrder() {
         customer_name: fields["f-name"],
         phone: fields["f-phone"],
         address: fields["f-address"],
+        house: el("f-house").value.trim() || null,
+        entrance: el("f-entrance").value.trim() || null,
+        flat: el("f-flat").value.trim() || null,
+        lat: state.point.f ? state.point.f.lat : null,
+        lon: state.point.f ? state.point.f.lon : null,
         delivery_slot: state.slot,
         payment_method: state.payment,
         comment: el("f-comment").value.trim() || null,
@@ -589,7 +625,8 @@ async function loadProfile() {
     console.error(error);
     // без профиля галочку согласия негде поставить, а без неё сервер не примет
     // заказ — получился бы тупик. Считаем, что покупатель новый
-    state.profile = { name: telegramName(), phone: "", address: "", consent: false };
+    state.profile = { name: telegramName(), phone: "", address: "", house: "",
+                    entrance: "", flat: "", lat: null, lon: null, consent: false };
   }
   applyProfile();
 }
@@ -606,7 +643,8 @@ function forgetProfile() {
     if (!yes) return;
     try {
       await api("/api/profile", { method: "DELETE" });
-      state.profile = { name: telegramName(), phone: "", address: "", consent: false };
+      state.profile = { name: telegramName(), phone: "", address: "", house: "",
+                    entrance: "", flat: "", lat: null, lon: null, consent: false };
       applyProfile();
       renderProfile();
     } catch (error) {
@@ -624,11 +662,21 @@ function applyProfile() {
   el("f-name").value = p.name;
   el("f-phone").value = p.phone || "+998 ";
   el("f-address").value = p.address;
+  // точку из профиля подставляем в заказ: обычно везут туда же, а поменять
+  // её на другой адрес можно прямо в оформлении
+  el("f-house").value = p.house || "";
+  el("f-entrance").value = p.entrance || "";
+  el("f-flat").value = p.flat || "";
+  state.point.f = p.lat != null && p.lon != null ? { lat: p.lat, lon: p.lon } : null;
+  renderPoint("f");
   // согласие берётся один раз: уже дано — больше не спрашиваем
   el("agree-box").classList.toggle("hidden", p.consent);
 
   el("addr").classList.remove("hidden");
-  el("addr-t").textContent = p.address || "Укажите адрес";
+  // в шапке показываем адрес с домом: без него строка «Шарк Тонги улица»
+  // выглядит как незаполненная
+  const short = [p.address, p.house && `дом ${p.house}`].filter(Boolean).join(", ");
+  el("addr-t").textContent = short || "Укажите адрес";
   el("addr-s").textContent = p.address ? "Доставим за 60–90 минут" : "Чтобы не набирать при заказе";
 }
 
@@ -637,6 +685,11 @@ function renderProfile() {
   el("p-name").value = p.name;
   el("p-phone").value = p.phone || "+998 ";
   el("p-address").value = p.address;
+  el("p-house").value = p.house || "";
+  el("p-entrance").value = p.entrance || "";
+  el("p-flat").value = p.flat || "";
+  state.point.p = p.lat != null && p.lon != null ? { lat: p.lat, lon: p.lon } : null;
+  renderPoint("p");
   el("p-agree-box").classList.toggle("hidden", p.consent);
   el("p-agree").checked = false;
   el("profile-error").classList.add("hidden");
@@ -670,6 +723,11 @@ async function saveProfile() {
         customer_name: fields["p-name"],
         phone: fields["p-phone"],
         address: fields["p-address"],
+        house: el("p-house").value.trim() || null,
+        entrance: el("p-entrance").value.trim() || null,
+        flat: el("p-flat").value.trim() || null,
+        lat: state.point.p ? state.point.p.lat : null,
+        lon: state.point.p ? state.point.p.lon : null,
         consent: true,
       },
     });
@@ -704,6 +762,7 @@ async function openOrders() {
   el("orders-body").innerHTML = `<div class="msg">Загружаем…</div>`;
   try {
     const orders = await api("/api/my-orders");
+    state.orders = orders;      // из этого списка открывается карточка заказа
     el("orders-body").innerHTML = orders.length
       ? orders.map(orderCard).join("")
       : `<div class="msg">Вы ещё ничего не заказывали</div>`;
@@ -715,30 +774,636 @@ async function openOrders() {
   }
 }
 
+/* Путь заказа значками — то, ради чего покупатель и открывает «Мои заказы».
+ *
+ * Состояния те же, что у оператора (app/order_status.py), но показываем только
+ * четыре: «ждёт оплаты» — это ещё не шаг пути, а его отсутствие, а отмена
+ * выбивается из цепочки совсем, и рисовать её кружком в ряду нельзя. */
+const TRACK = [
+  { status: "CONFIRMED", icon: "ti-receipt" },
+  { status: "ASSEMBLING", icon: "ti-package" },
+  { status: "DELIVERING", icon: "ti-bike" },
+  { status: "DONE", icon: "ti-check" },
+];
+
+function tracker(order, big = false) {
+  const size = big ? " big" : "";
+  if (order.status === "CANCELED") {
+    return `<div class="track-off${size}"><i class="ti ti-x"></i> ${esc(order.status_text)}</div>`;
+  }
+  // сколько шагов уже пройдено: «ждёт оплаты» — ни одного
+  const done = TRACK.findIndex((step) => step.status === order.status);
+  const cells = TRACK.map((step, index) => {
+    const on = index <= done;
+    const line = index === 0 ? "" : `<span class="ln${index <= done ? " on" : ""}"></span>`;
+    return `${line}<span class="st${on ? " on" : ""}"><i class="ti ${step.icon}"></i></span>`;
+  }).join("");
+  return `<div class="track${size}">${cells}</div>
+          <div class="track-name${size}">${esc(order.status_text)}</div>`;
+}
+
 function orderCard(order) {
   const when = new Date(order.created_at).toLocaleString("ru-RU", {
     day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
   });
   return `
-    <div class="card">
+    <div class="card ord-card" data-order="${esc(order.number)}">
       <div class="row" style="margin-bottom:7px">
         <span style="font-weight:600">${esc(order.number)}</span>
         <span class="prc">${money(order.total)}</span>
       </div>
       <div class="row">
         <span class="mut" style="font-size:12px">${esc(when)}</span>
-        <span class="mut" style="font-size:12px">${esc(order.status_text)}</span>
       </div>
-      <div class="mut" style="font-size:12px;margin-top:7px">
-        ${order.items.length} ${plural(order.items.length, "позиция", "позиции", "позиций")}
-        · ${esc(order.delivery_slot)}
+      ${tracker(order)}
+      <div class="row">
+        <span class="mut" style="font-size:12px">
+          ${order.items.length} ${plural(order.items.length, "позиция", "позиции", "позиций")}
+          · ${esc(order.delivery_slot)}</span>
+        <span class="mut" style="font-size:12px">подробнее ›</span>
       </div>
     </div>`;
 }
 
+/* Отдельный экран заказа. В списке видно только главное — номер, сумму и путь;
+ * всё остальное открывается по нажатию, как в карточке товара. Раскрывающийся
+ * список внутри карточки для этого не годился: состав, адрес и комментарий
+ * на маленьком экране складываются в простыню, из которой ничего не выудить. */
+function openOrder(number) {
+  const order = (state.orders || []).find((o) => o.number === number);
+  if (!order) return;
+  el("order-ttl").textContent = `Заказ ${order.number}`;
+  const when = new Date(order.created_at).toLocaleString("ru-RU", {
+    day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
+  });
+  const paid = order.payment_method === "online";
+
+  el("order-body").innerHTML = `
+    <div class="card">
+      <div class="row">
+        <span class="mut" style="font-size:12.5px">${esc(when)}</span>
+        <span class="ord-big prc">${money(order.total)}</span>
+      </div>
+      ${tracker(order, true)}
+    </div>
+
+    <div class="card">
+      <div class="mut" style="font-size:12.5px;margin-bottom:8px">Состав заказа</div>
+      ${order.items.map(orderLine).join("")}
+      <div class="row" style="font-size:13.5px;margin-top:10px">
+        <span class="mut">Товары</span><span>${money(order.goods_total)}</span>
+      </div>
+      <div class="row" style="font-size:13.5px;margin-top:6px">
+        <span class="mut">Доставка</span><span>${money(order.delivery_price)}</span>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <span style="font-weight:600">Итого</span>
+        <span class="prc" style="font-weight:600">${money(order.total)}</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ord-row"><span class="k">Куда</span>
+        <span class="v">${esc(order.address)}</span></div>
+      <div class="ord-row"><span class="k">Телефон</span>
+        <span class="v">${esc(order.phone)}</span></div>
+      <div class="ord-row"><span class="k">Время</span>
+        <span class="v">${esc(order.delivery_slot)}</span></div>
+      <div class="ord-row"><span class="k">Оплата</span>
+        <span class="v">${paid ? "онлайн картой" : "наличными курьеру"}</span></div>
+      ${order.comment ? `<div class="ord-row"><span class="k">Комментарий</span>
+        <span class="v">${esc(order.comment)}</span></div>` : ""}
+    </div>`;
+  show("order");
+}
+
+// Состав заказа. Названия и цены берутся те, что были на момент оформления
+// (BR-09): в заказе покупателя каталог менять задним числом нельзя.
+function orderLine(item) {
+  const count = item.quantity > 1 ? ` × ${item.quantity}` : "";
+  // у товара может не быть фото: карточку заводят из REGOS без картинки,
+  // и заказ должен читаться в любом случае — вместо снимка ставим заглушку
+  const photo = item.photo
+    ? `<img class="ord-pic" src="${esc(item.photo)}" alt="" loading="lazy">`
+    : `<span class="ord-pic ord-pic-none"></span>`;
+  return `
+    <div class="ord-line">
+      ${photo}
+      <span class="ord-name">${esc(item.product_name)}
+        <span class="mut">${esc(item.weight)}${count}</span></span>
+      <span class="ord-sum">${money(item.price * item.quantity)}</span>
+    </div>`;
+}
+
+// ---------- точка на карте ----------
+
+/* Адрес строкой курьеру нужен всё равно — по нему подъезд, этаж и квартира.
+ * Карта отвечает за другое: по ней он находит дом, не разбирая «за третьим
+ * магазином направо». Поэтому точка необязательна и ничего не заменяет.
+ *
+ * Библиотека и стили лежат у нас же и подгружаются только при открытии карты:
+ * тянуть 150 КБ ради каталога незачем, а сторонний CDN — лишняя точка отказа
+ * там, где связь и так небыстрая.
+ */
+
+const TASHKENT = [41.311081, 69.240562];   // центр по умолчанию
+const MAP_ZOOM = 16;
+
+/* Два вида карты. Спутник стоит первым и по умолчанию: свой дом человек узнаёт
+ * по крыше и двору быстрее, чем по названию улицы, а в махаллях названий часто
+ * и нет. Схема — обычный OpenStreetMap: по Ташкенту он знает дома, дворы
+ * и проезды, чего нельзя сказать о других бесплатных схемах.
+ *
+ * Здесь была схема CARTO с подписями поверх спутника. В сентябре 2026 CARTO
+ * закрыли бесплатную отдачу: тайлы приходят с водяным знаком «API KEY
+ * REQUIRED» поверх карты. Ссылки оставлять нельзя — красиво, но нечитаемо;
+ * подписей к спутнику из-за этого больше нет, зато адрес под картой
+ * определяется по точке и показывается словами.
+ *
+ * Ключи ни одному из слоёв не нужны, но указывать источник обязаны оба.
+ * Esri на снимках просит ссылаться на себя и поставщиков, OpenStreetMap —
+ * на участников проекта. */
+const MAP_LAYERS = {
+  satellite: {
+    tiles: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    maxZoom: 19,
+    attribution: "Esri, Maxar",
+  },
+  scheme: {
+    tiles: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    maxZoom: 19,
+    attribution: "© OpenStreetMap",
+  },
+};
+
+const MAP_LAYER_KEY = "rozmart.map.layer";
+
+let mapView = null;        // объект Leaflet, создаётся один раз
+let mapTarget = "f";       // какое поле правим: «f» — заказ, «p» — профиль
+let mapMoved = false;      // карту уже двигали руками
+let mapBase = null;        // слой подложки
+let mapKind = "satellite"; // выбранный вид
+let mapAddress = "";       // что нашлось по точке в центре карты
+let mapHouse = "";         // номер дома оттуда же — у него своё поле
+let mapMe = null;          // синяя точка «вы здесь»
+let mapAccuracy = null;    // круг точности вокруг неё
+let mapLocating = false;   // запрос координат уже идёт
+let mapLocationReady = null;   // промис инициализации LocationManager
+let mapLookup = null;      // таймер отложенного запроса адреса
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const tag = document.createElement("script");
+    tag.src = src;
+    tag.onload = resolve;
+    tag.onerror = () => reject(new Error(`не загрузился ${src}`));
+    document.head.appendChild(tag);
+  });
+}
+
+async function loadLeaflet() {
+  if (window.L) return;
+  const css = document.createElement("link");
+  css.rel = "stylesheet";
+  css.href = "/static/vendor/leaflet/leaflet.css";
+  document.head.appendChild(css);
+  await loadScript("/static/vendor/leaflet/leaflet.js");
+}
+
+/** Открывает карту для поля prefix: «f» — оформление заказа, «p» — профиль. */
+async function openMap(prefix) {
+  mapTarget = prefix;
+  show("map");
+  try {
+    await loadLeaflet();
+  } catch (error) {
+    console.error(error);
+    show(prefix === "f" ? "checkout" : "profile");
+    return note("Карта не загрузилась. Проверьте связь или напишите адрес словами.");
+  }
+
+  const point = state.point[prefix];
+  const center = point ? [point.lat, point.lon] : TASHKENT;
+
+  mapMoved = false;
+  if (!mapView) {
+    mapView = L.map("map", { zoomControl: false, attributionControl: true })
+      .setView(center, MAP_ZOOM);
+    // как только карту тронули пальцем, автоматическое «моё местоположение»
+    // больше не вмешивается: ответ на запрос геопозиции приходит с задержкой
+    // в несколько секунд и иначе уводит карту из-под уже выбранной точки
+    mapView.on("dragstart zoomstart", () => { mapMoved = true; });
+    // адрес под булавкой обновляем, когда карта остановилась
+    mapView.on("moveend", scheduleLookup);
+    setMapKind(savedMapKind());
+  } else {
+    mapView.setView(center, MAP_ZOOM);
+  }
+
+  // экран показан только что: Leaflet посчитал размеры, пока блок был скрыт,
+  // и без этого рисует карту в четверть экрана
+  setTimeout(() => mapView.invalidateSize(), 60);
+  scheduleLookup();
+  if (!point) locateMe(true);
+}
+
+function savedMapKind() {
+  // выбор запоминаем: человек, которому привычнее схема, не должен переключать
+  // её при каждом заказе. localStorage может быть недоступен — не беда
+  try {
+    const saved = localStorage.getItem(MAP_LAYER_KEY);
+    if (saved && MAP_LAYERS[saved]) return saved;
+  } catch (error) {
+    console.error(error);
+  }
+  return "satellite";
+}
+
+/** Переключает подложку карты. */
+function setMapKind(kind) {
+  if (!MAP_LAYERS[kind] || !mapView) return;
+  mapKind = kind;
+  const layer = MAP_LAYERS[kind];
+
+  if (mapBase) mapView.removeLayer(mapBase);
+
+  mapBase = L.tileLayer(layer.tiles, {
+    maxZoom: layer.maxZoom,
+    // указание источника обязательно по условиям обоих поставщиков карт
+    attribution: layer.attribution,
+  }).addTo(mapView);
+
+  for (const button of document.querySelectorAll("[data-layer]")) {
+    button.classList.toggle("on", button.dataset.layer === kind);
+  }
+  try {
+    localStorage.setItem(MAP_LAYER_KEY, kind);
+  } catch (error) {
+    console.error(error);   // приватный режим — просто не запомним выбор
+  }
+}
+
+/* «Где я» — самое хрупкое место карты, поэтому подробно.
+ *
+ * Внутри Telegram браузерный доступ к геопозиции часто закрыт, и работает
+ * только LocationManager — его же средствами Telegram и спрашивает разрешение.
+ * Спрашивать его при каждом открытии карты нельзя: покупатель видел окно
+ * с вопросом на каждый заказ. Поэтому сами, без нажатия кнопки, мы берём
+ * координаты, только если доступ уже выдан; в остальных случаях ждём кнопку —
+ * то есть человек сам попросил, и окно с вопросом ему понятно.
+ *
+ * И результат надо показать. Раньше карта просто уезжала, и если точка была
+ * рядом, казалось, что кнопка не работает. Теперь на карте появляется синяя
+ * точка и круг точности: видно, где телефон считает нас находящимися
+ * и насколько уверенно.
+ */
+
+function locationManager() {
+  const tg = window.Telegram && window.Telegram.WebApp;
+  const manager = tg && tg.LocationManager;
+  return manager && typeof manager.getLocation === "function" ? manager : null;
+}
+
+/** Инициализация нужна один раз за сессию; второй init только тратит время. */
+function initLocation(manager) {
+  if (!mapLocationReady) {
+    mapLocationReady = new Promise((resolve) => {
+      try {
+        if (manager.isInited) return resolve(true);
+        manager.init(() => resolve(true));
+        // бывает, что ответа нет вовсе — на старых клиентах и вне Telegram.
+        // Две с половиной секунды: дольше человек считает кнопку сломанной
+        setTimeout(() => resolve(Boolean(manager.isInited)), 2500);
+      } catch (error) {
+        console.error(error);
+        resolve(false);
+      }
+    });
+  }
+  return mapLocationReady;
+}
+
+/** Показывает, где покупатель сейчас. quiet — сами, без его просьбы. */
+async function locateMe(quiet) {
+  if (mapLocating) return;
+  // Значок начинает крутиться сразу по нажатию, ещё до первого запроса:
+  // Telegram отвечает не мгновенно, и эти секунды молчания выглядят так,
+  // будто кнопка не работает.
+  if (!quiet) setLocating(true);
+  const manager = locationManager();
+  if (!manager) return browserLocate(quiet);
+
+  const ready = await initLocation(manager);
+  if (!ready || manager.isLocationAvailable === false) {
+    // клиент старый или устройство не умеет — молча уходим в браузерный путь
+    return browserLocate(quiet);
+  }
+  // без явной просьбы разрешение не спрашиваем: это и есть то самое окно,
+  // которое выскакивало каждый раз
+  if (quiet && manager.isAccessGranted !== true) return setLocating(false);
+
+  setLocating(true);
+  try {
+    manager.getLocation((data) => {
+      setLocating(false);
+      if (data && data.latitude) {
+        return showMe(data.latitude, data.longitude, data.horizontal_accuracy, quiet);
+      }
+      if (quiet) return;
+      offerSettings(manager);
+    });
+  } catch (error) {
+    console.error(error);
+    setLocating(false);
+    browserLocate(quiet);
+  }
+}
+
+/** Доступ закрыт. Telegram умеет открыть свои настройки — предлагаем. */
+function offerSettings(manager) {
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if (manager.isAccessGranted === false && manager.openSettings && tg && tg.showConfirm) {
+    return tg.showConfirm(
+      "Доступ к геопозиции для приложения выключен. Открыть настройки?",
+      (yes) => { if (yes) manager.openSettings(); },
+    );
+  }
+  note("Не удалось определить местоположение. Найдите дом на карте руками.");
+}
+
+async function browserLocate(quiet) {
+  if (!navigator.geolocation) {
+    setLocating(false);
+    if (!quiet) note("Телефон не дал определить местоположение. Найдите дом на карте руками.");
+    return;
+  }
+  if (quiet) {
+    // Сами спрашиваем, только если разрешение уже дано: иначе браузер покажет
+    // своё окно с вопросом — при каждом открытии карты
+    if (!navigator.permissions) return setLocating(false);
+    try {
+      const status = await navigator.permissions.query({ name: "geolocation" });
+      if (status.state !== "granted") return setLocating(false);
+    } catch (error) {
+      return setLocating(false);
+    }
+  }
+
+  setLocating(true);
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      setLocating(false);
+      showMe(position.coords.latitude, position.coords.longitude,
+             position.coords.accuracy, quiet);
+    },
+    (error) => {
+      setLocating(false);
+      if (quiet) return;
+      note(error.code === 1
+        ? "Доступ к геопозиции запрещён. Разрешите его в настройках телефона "
+          + "или найдите дом на карте руками."
+        : "Не удалось определить местоположение. Найдите дом на карте руками.");
+    },
+    // maximumAge: свежий сигнал ищем не дольше десяти секунд, а ответ минутной
+    // давности берём сразу — на улице он тот же, а ждать не приходится
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+  );
+}
+
+/** Синяя точка и круг точности там, где телефон нас нашёл. */
+function showMe(lat, lon, accuracy, quiet) {
+  if (!mapView) return;
+  const radius = Math.min(Math.max(Number(accuracy) || 0, 0), 2000);
+
+  if (!mapMe) {
+    mapMe = L.circleMarker([lat, lon], {
+      radius: 7, weight: 3, color: "#fff", fillColor: "#1C64F2", fillOpacity: 1,
+    }).addTo(mapView);
+    mapAccuracy = L.circle([lat, lon], {
+      radius, weight: 1, color: "#1C64F2", fillColor: "#1C64F2", fillOpacity: 0.12,
+    }).addTo(mapView);
+  } else {
+    mapMe.setLatLng([lat, lon]);
+    mapAccuracy.setLatLng([lat, lon]).setRadius(radius);
+  }
+
+  // карту, которую уже двигали руками, автоматический ответ не трогает
+  if (quiet && mapMoved) return;
+  // при слабом сигнале не приближаем вплотную: булавка встала бы не на тот дом,
+  // а человек бы этого не заметил
+  mapView.setView([lat, lon], radius > 120 ? 16 : 17);
+}
+
+function setLocating(busy) {
+  mapLocating = busy;
+  const button = el("map-here");
+  if (button) button.classList.toggle("busy", busy);
+}
+
+/** Короткое сообщение покупателю. В Telegram обычный alert() показывается
+ *  не везде, поэтому по возможности просим показать его сам Telegram. */
+function note(text) {
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if (tg && tg.showAlert) return tg.showAlert(text);
+  alert(text);
+}
+
+/* Адрес по точке. Спрашиваем не на каждый сдвиг карты, а когда её отпустили
+ * и она постояла секунду: геокодер бесплатный и просит не частить, да и
+ * покупателю незачем видеть мелькание адресов, пока он возит карту пальцем. */
+function scheduleLookup() {
+  clearTimeout(mapLookup);
+  mapHouse = "";
+  setMapAddress("", "Определяем адрес…");
+  mapLookup = setTimeout(lookupAddress, 900);
+}
+
+async function lookupAddress() {
+  if (!mapView) return;
+  const center = mapView.getCenter();
+  const at = [center.lat.toFixed(6), center.lng.toFixed(6)];
+  try {
+    const found = await api(`/api/geocode?lat=${at[0]}&lon=${at[1]}`);
+    // пока ходил запрос, карту могли увезти дальше: тот ответ уже не про эту точку
+    const now = mapView.getCenter();
+    if (now.lat.toFixed(6) !== at[0] || now.lng.toFixed(6) !== at[1]) return;
+    mapHouse = found.house || "";
+    setMapAddress(found.address || "", found.address
+      ? "" : "Адрес не определился — напишите его словами");
+  } catch (error) {
+    console.error(error);
+    mapHouse = "";
+    setMapAddress("", "Адрес не определился — напишите его словами");
+  }
+}
+
+function setMapAddress(address, fallbackHint) {
+  mapAddress = address;
+  // номер дома показываем вместе с улицей: человек должен видеть, что булавка
+  // стоит на его доме, а не на соседнем
+  const shown = address && mapHouse ? `${address}, дом ${mapHouse}` : address;
+  el("map-hint").textContent = shown
+    || fallbackHint
+    || "Подвиньте карту так, чтобы булавка встала на ваш дом.";
+}
+
+/** Запоминает точку в центре карты и возвращает покупателя к форме. */
+function saveMapPoint() {
+  if (mapView) {
+    const center = mapView.getCenter();
+    state.point[mapTarget] = {
+      // шесть знаков — около 10 см; больше хранить нет смысла
+      lat: Number(center.lat.toFixed(6)),
+      lon: Number(center.lng.toFixed(6)),
+    };
+    fillAddress(mapTarget, mapAddress);
+  }
+  renderPoint(mapTarget);
+  show(mapTarget === "f" ? "checkout" : "profile");
+}
+
+/** Ставит найденный адрес в поле.
+ *
+ * Именно ставит, а не предлагает: точка на карте — это и есть ответ на вопрос
+ * «куда везти», и человек, который её поставил, ждёт адрес в поле, а не ещё
+ * одну кнопку. Написанное раньше при этом заменяется, поэтому подъезд, этаж
+ * и квартиру дописывают после — об этом говорит подсказка под полем. */
+function fillAddress(prefix, address) {
+  if (!address) return;
+  const field = el(`${prefix}-address`);
+  field.value = address;
+  state.filled[prefix] = address;
+  field.classList.remove("bad");
+  // номер дома с карты кладём в своё поле; подъезд и квартиру знает
+  // только сам покупатель, их не трогаем
+  if (mapHouse) el(`${prefix}-house`).value = mapHouse;
+}
+
+function clearPoint(prefix) {
+  state.point[prefix] = null;
+  renderPoint(prefix);
+}
+
+function renderPoint(prefix) {
+  const box = el(`${prefix}-point`);
+  const point = state.point[prefix];
+  box.classList.toggle("hidden", !point);
+  if (!point) return;
+  box.innerHTML = `
+    <span class="ok">Адрес и дом взяты с карты</span>
+    <button data-map="${prefix}">изменить точку</button>
+    <button data-drop-map="${prefix}">убрать</button>`;
+}
+
+// ---------- обновление свайпом сверху вниз ----------
+
+/* Своего «потянуть, чтобы обновить» в Telegram нет, а браузерного не будет:
+ * вертикальный свайп там принадлежит самому Telegram — им приложение
+ * сворачивают. Мы этот жест отключаем (disableVerticalSwipes), иначе
+ * приложение закрывалось бы при каждом промахе мимо списка. Освободившийся
+ * жест и используем: тянем сверху вниз — перечитываем то, что на экране.
+ */
+
+const PULL_SCREENS = ["catalog", "cart", "orders", "profile"];
+const PULL_THRESHOLD = 70;      // насколько надо оттянуть, чтобы сработало
+const PULL_MAX = 96;            // дальше значок не едет, даже если тянут сильнее
+
+let pullFrom = null;            // откуда начали тянуть
+let pullShift = 0;              // на сколько оттянули (с сопротивлением)
+let refreshing = false;
+
+function pullBadge() {
+  let badge = el("pull");
+  if (!badge) {
+    badge = document.createElement("div");
+    badge.id = "pull";
+    badge.className = "pull";
+    badge.innerHTML = `<i class="ti ti-refresh"></i>`;
+    document.body.appendChild(badge);
+  }
+  return badge;
+}
+
+function drawPull(shift, spinning) {
+  const badge = pullBadge();
+  badge.style.transform = `translateX(-50%) translateY(${shift}px) rotate(${shift * 3}deg)`;
+  badge.style.opacity = String(Math.min(shift / PULL_THRESHOLD, 1));
+  badge.classList.toggle("ready", shift >= PULL_THRESHOLD && !spinning);
+  badge.classList.toggle("spin", Boolean(spinning));
+}
+
+function hidePull() {
+  const badge = pullBadge();
+  badge.style.transition = "transform .2s, opacity .2s";
+  drawPull(0, false);
+  setTimeout(() => { badge.style.transition = ""; }, 220);
+}
+
+/** Перечитывает то, что показано сейчас. */
+async function refreshScreen() {
+  if (state.screen === "orders") return openOrders();
+  if (state.screen === "cart") {
+    await refreshCart();
+    return renderCart();
+  }
+  if (state.screen === "profile") return loadProfile();
+  // каталог: заодно обновляем стоимость доставки — она тоже приходит с сервера
+  try {
+    const { delivery_price: price } = await api("/api/delivery-price");
+    state.deliveryPrice = price;
+  } catch (error) {
+    console.error(error);
+  }
+  return loadCatalog();
+}
+
+document.addEventListener("touchstart", (event) => {
+  if (refreshing || event.touches.length !== 1) return;
+  if (!PULL_SCREENS.includes(state.screen)) return;
+  // тянуть можно только от самого верха: иначе жест спорит с прокруткой списка
+  if (window.scrollY > 0) return;
+  pullFrom = event.touches[0].clientY;
+  pullShift = 0;
+}, { passive: true });
+
+document.addEventListener("touchmove", (event) => {
+  if (pullFrom === null) return;
+  const moved = event.touches[0].clientY - pullFrom;
+  if (moved <= 0) {                     // потянули вверх — это обычная прокрутка
+    pullFrom = null;
+    return hidePull();
+  }
+  // сопротивление: палец проходит вдвое больше, чем едет значок, — так жест
+  // ощущается упругим и не срабатывает от случайного касания
+  pullShift = Math.min(moved / 2, PULL_MAX);
+  drawPull(pullShift, false);
+}, { passive: true });
+
+document.addEventListener("touchend", async () => {
+  if (pullFrom === null) return;
+  const enough = pullShift >= PULL_THRESHOLD;
+  pullFrom = null;
+  if (!enough) return hidePull();
+
+  refreshing = true;
+  drawPull(PULL_THRESHOLD, true);
+  const tg = window.Telegram && window.Telegram.WebApp;
+  // короткий отклик: понятно, что жест принят, ещё до того, как придут данные
+  if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred("light");
+  try {
+    await refreshScreen();
+  } catch (error) {
+    console.error(error);
+  } finally {
+    refreshing = false;
+    hidePull();
+  }
+}, { passive: true });
+
 // ---------- переключение экранов ----------
 
-const SCREENS = ["catalog", "product", "cart", "checkout", "done", "orders", "profile"];
+const SCREENS = ["catalog", "product", "cart", "checkout", "done", "orders", "profile",
+                 "order", "map"];
 
 // корневые разделы — те, между которыми переключает нижнее меню. Остальные
 // экраны открываются «поверх» и меню не показывают: у них своя кнопка внизу
@@ -746,7 +1411,9 @@ const ROOT_SCREENS = ["catalog", "cart", "orders", "profile"];
 const SCREENS_WITH_BUTTON = ["product", "cart", "checkout", "done", "profile"];
 
 // куда ведёт кнопка «назад» Telegram с каждого некорневого экрана
-const BACK_TO = { product: "catalog", checkout: "cart", done: "catalog" };
+// с карты возвращаемся туда, откуда её открыли, — это решает mapReturn()
+const BACK_TO = { product: "catalog", checkout: "cart", done: "catalog",
+                  order: "orders" };
 
 function show(name) {
   // незавершённый запрос не должен подменить экран: пока грузилась карточка
@@ -820,6 +1487,22 @@ document.addEventListener("click", (event) => {
   }
   if (event.target.closest("#back")) return show("catalog");
   if (event.target.closest("#add")) return addToCart();
+
+  const orderCardEl = event.target.closest("[data-order]");
+  if (orderCardEl) return openOrder(orderCardEl.dataset.order);
+
+  const mapButton = event.target.closest("[data-map]");
+  if (mapButton) return openMap(mapButton.dataset.map);
+
+  const dropPoint = event.target.closest("[data-drop-map]");
+  if (dropPoint) return clearPoint(dropPoint.dataset.dropMap);
+
+  const layerButton = event.target.closest("[data-layer]");
+  if (layerButton) return setMapKind(layerButton.dataset.layer);
+
+  if (event.target.closest("#map-done")) return saveMapPoint();
+  if (event.target.closest("#map-here")) return locateMe(false);
+  if (event.target.closest("#map-back")) return show(mapTarget === "f" ? "checkout" : "profile");
 
   if (event.target.closest("#save-profile")) return saveProfile();
   if (event.target.closest("#forget")) return forgetProfile();
@@ -900,6 +1583,9 @@ function setupTelegram() {
     if (tg.setBottomBarColor) tg.setBottomBarColor("#ffffff");
     if (tg.BackButton) {
       tg.BackButton.onClick(() => {
+        // с карты возвращаемся к той форме, из которой её открыли: иначе
+        // «назад» уносит из наполовину заполненного заказа в каталог
+        if (state.screen === "map") return show(mapTarget === "f" ? "checkout" : "profile");
         const back = BACK_TO[state.screen] || "catalog";
         return back === "cart" ? openCart() : show(back);
       });
@@ -936,3 +1622,33 @@ async function start() {
 }
 
 start();
+
+/* Вход в административную панель.
+ *
+ * Mini App открывается всегда по корневому адресу, адресной строки внутри
+ * Telegram нет, а в обычном браузере подпись не придёт и панель ответит 401.
+ * Поэтому единственный способ туда попасть — перейти из самой витрины:
+ * тот же источник, тот же WebView, подпись остаётся доступной.
+ *
+ * Кнопку видит только тот, кого сервер признал администратором. Проверка идёт
+ * на сервере: скрыть кнопку на клиенте — не защита, доступ всё равно решает он.
+ */
+(function () {
+  'use strict';
+  var tg = window.Telegram && window.Telegram.WebApp;
+  if (!tg || !tg.initData) return;
+
+  fetch('/api/admin/whoami', { headers: { 'X-Telegram-Init-Data': tg.initData } })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (me) {
+      if (!me || !me.admin) return;
+      var a = document.createElement('a');
+      a.href = '/admin?tg=1';   // подпись проверит сама панель
+      a.textContent = 'Панель';
+      a.style.cssText = 'position:fixed;left:10px;bottom:76px;z-index:900;' +
+        'background:#E30613;color:#fff;border-radius:18px;padding:7px 14px;' +
+        'font-size:12px;text-decoration:none;box-shadow:0 3px 12px rgba(0,0,0,.25)';
+      document.body.appendChild(a);
+    })
+    .catch(function () {});   // витрине эта кнопка не нужна: молча пропускаем
+})();

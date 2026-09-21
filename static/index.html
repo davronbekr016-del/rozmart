@@ -95,8 +95,84 @@ body.tabs-on .ft{bottom:calc(var(--tabs) + var(--safe-bot));padding-bottom:12px}
 .opt i{font-size:20px;color:#D5D5D5}
 .opt.on i{color:#E30613}
 .err{background:#FFF0F0;color:#B3050F;border-radius:10px;padding:12px;font-size:13px;line-height:1.5;margin-top:12px}
+/* путь заказа: кружки со значками, пройденные — красные */
+.track{display:flex;align-items:center;justify-content:center;margin:12px 0 7px}
+.track .st{width:34px;height:34px;border-radius:50%;background:#F0F0F0;color:#C4C4C4;
+  display:flex;align-items:center;justify-content:center;font-size:17px;flex:none;
+  transition:background .2s,color .2s}
+.track .st.on{background:#E30613;color:#fff}
+.track .ln{width:26px;height:2px;background:#F0F0F0;flex:none}
+.track .ln.on{background:#E30613}
+.track-name{text-align:center;font-size:13.5px;font-weight:500;margin-bottom:4px}
+/* карточка заказа целиком: значки крупнее, чем в списке */
+.track.big{margin:16px 0 8px}
+.track.big .st{width:44px;height:44px;font-size:21px}
+.track.big .ln{width:30px}
+.track-name.big{font-size:16px;margin-bottom:10px}
+/* строки «что где» в карточке заказа */
+.ord-row{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid #F2F2F2;font-size:14px}
+.ord-row:last-child{border-bottom:none}
+.ord-row .k{color:#8A8A8A;flex:none;width:104px;font-size:13px}
+.ord-row .v{flex:1;min-width:0;line-height:1.45}
+.ord-big{font-size:20px;font-weight:600}
+.ord-card{cursor:pointer}
+.ord-card:active{opacity:.7}
+/* значок обновления: выезжает из-под шапки, пока тянут список вниз */
+.pull{position:fixed;left:50%;top:calc(var(--safe-top) + 4px);z-index:40;width:36px;height:36px;
+  border-radius:50%;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.2);color:#8A8A8A;
+  display:flex;align-items:center;justify-content:center;font-size:19px;opacity:0;
+  transform:translateX(-50%);pointer-events:none}
+.pull.ready{color:#E30613}
+.pull.spin i{animation:spin 1s linear infinite}
+/* отменённый заказ в цепочку не встраивается: у него своя строка */
+.track-off{display:flex;align-items:center;justify-content:center;gap:6px;
+  margin:12px 0 6px;color:#B3050F;font-size:13.5px;font-weight:500}
+@media(max-width:340px){.track .ln{width:16px}}
+/* карта на весь экран под шапкой: высоту считаем сами, иначе Leaflet получит
+   нулевую и покажет серый прямоугольник */
+#screen-map{position:fixed;inset:0;display:flex;flex-direction:column;z-index:30;background:#fff}
+#map{flex:1;min-height:0}
+/* булавка приколота к центру экрана, а не к карте: двигают карту, точка стоит.
+   Так не нужно ловить перетаскивание маркера пальцем по мелкому экрану */
+.map-pin{position:absolute;left:50%;top:50%;transform:translate(-50%,-100%);z-index:400;
+  font-size:34px;color:#E30613;text-shadow:0 2px 6px rgba(0,0,0,.35);pointer-events:none}
+/* выбор вида карты: поверх карты, слева сверху, чтобы не спорить с булавкой */
+.map-kinds{position:absolute;left:12px;top:12px;z-index:400;display:flex;gap:0;
+  background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.map-kinds button{border:none;background:#fff;color:#333;font:inherit;font-size:13px;
+  padding:9px 14px;font-family:inherit}
+.map-kinds button.on{background:#E30613;color:#fff}
+.map-here{position:absolute;right:14px;bottom:14px;z-index:400;width:46px;height:46px;border-radius:50%;
+  background:#fff;border:none;box-shadow:0 2px 10px rgba(0,0,0,.25);color:#E30613;font-size:22px;
+  display:flex;align-items:center;justify-content:center}
+/* пока ищем координаты — значок крутится: без этого кажется, что кнопка мертва */
+.map-here.busy{color:#8A8A8A}
+.map-here.busy i{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.map-hint{font-size:13.5px;color:#333;margin-bottom:10px;line-height:1.45;min-height:19px}
+/* строка выбранной точки под полем адреса */
+/* дом, подъезд, квартира — в одну строку: каждое поле короткое,
+   а по отдельности они занимали бы пол-экрана */
+.addr3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.addr3 .inp{margin:6px 0 12px}
+.point{display:flex;align-items:center;gap:8px;font-size:13px;margin:-6px 0 12px}
+.point .ok{color:#2E7D32}
+.point button{background:none;border:none;color:#E30613;font:inherit;font-size:13px;padding:0}
+.map-btn{width:100%;background:#F3F3F3;color:#333;border:none;border-radius:12px;padding:12px;
+  font-size:14px;font-family:inherit;margin:-6px 0 12px;display:flex;align-items:center;
+  justify-content:center;gap:8px}
 .line{display:flex;gap:11px;align-items:center}
 .del{color:#B0B0B0;font-size:19px;padding:6px;margin:-6px}
+/* состав заказа: маркер у <summary> в WebKit рисуется своим, его убираем */
+.ord-items>summary::-webkit-details-marker{display:none}
+.ord-items>summary{outline:none}
+.ord-more{text-decoration:underline}
+.ord-items[open] .ord-more{text-decoration:none}
+.ord-line{display:flex;align-items:center;gap:10px;margin-top:8px;font-size:13px}
+.ord-pic{width:38px;height:38px;border-radius:7px;object-fit:cover;flex:none;background:#F2F2F2}
+.ord-pic-none{display:block}
+.ord-name{flex:1;min-width:0;line-height:1.35}
+.ord-sum{white-space:nowrap}
 </style>
 </head>
 <body>
@@ -152,6 +228,16 @@ body.tabs-on .ft{bottom:calc(var(--tabs) + var(--safe-bot));padding-bottom:12px}
       <input class="inp" id="f-phone" inputmode="tel" value="+998 ">
       <label class="mut" for="f-address">Адрес доставки</label>
       <input class="inp" id="f-address" placeholder="Район, улица, дом, квартира">
+      <button class="map-btn" data-map="f"><i class="ti ti-map-pin"></i>Указать на карте</button>
+      <div class="point hidden" id="f-point"></div>
+      <div class="addr3">
+        <div><label class="mut" for="f-house">Дом</label>
+          <input class="inp" id="f-house" placeholder="12"></div>
+        <div><label class="mut" for="f-entrance">Подъезд</label>
+          <input class="inp" id="f-entrance" placeholder="3"></div>
+        <div><label class="mut" for="f-flat">Квартира</label>
+          <input class="inp" id="f-flat" inputmode="numeric" placeholder="42"></div>
+      </div>
       <label class="mut" for="f-comment">Комментарий к заказу</label>
       <input class="inp" id="f-comment" placeholder="Например: позвонить за 10 минут">
     </div>
@@ -182,6 +268,16 @@ body.tabs-on .ft{bottom:calc(var(--tabs) + var(--safe-bot));padding-bottom:12px}
       <input class="inp" id="p-phone" inputmode="tel" placeholder="+998 XX XXX XX XX">
       <label class="mut" for="p-address">Адрес доставки</label>
       <input class="inp" id="p-address" placeholder="Район, улица, дом, квартира">
+      <button class="map-btn" data-map="p"><i class="ti ti-map-pin"></i>Указать на карте</button>
+      <div class="point hidden" id="p-point"></div>
+      <div class="addr3">
+        <div><label class="mut" for="p-house">Дом</label>
+          <input class="inp" id="p-house" placeholder="12"></div>
+        <div><label class="mut" for="p-entrance">Подъезд</label>
+          <input class="inp" id="p-entrance" placeholder="3"></div>
+        <div><label class="mut" for="p-flat">Квартира</label>
+          <input class="inp" id="p-flat" inputmode="numeric" placeholder="42"></div>
+      </div>
     </div>
     <label class="agree hidden" id="p-agree-box">
       <input type="checkbox" id="p-agree">
@@ -208,6 +304,29 @@ body.tabs-on .ft{bottom:calc(var(--tabs) + var(--safe-bot));padding-bottom:12px}
   <!-- единственный экран без шапки: верхний отступ полного экрана считаем сами -->
   <div class="wrap" id="done-body" style="padding-top:calc(40px + var(--safe-top))"></div>
   <div class="ft"><button class="btn" data-go="catalog">Вернуться в каталог</button></div>
+</div>
+
+<div id="screen-order" class="hidden">
+  <div class="hd"><i class="ti ti-chevron-left" data-go="orders"></i><span id="order-ttl">Заказ</span></div>
+  <div class="wrap" id="order-body"></div>
+</div>
+
+<div id="screen-map" class="hidden">
+  <div class="hd"><i class="ti ti-chevron-left" id="map-back"></i><span>Точка на карте</span></div>
+  <div style="position:relative;flex:1;min-height:0;display:flex">
+    <div id="map"></div>
+    <div class="map-pin"><i class="ti ti-map-pin-filled"></i></div>
+    <div class="map-kinds" id="mapKinds">
+      <button data-layer="satellite">Спутник</button>
+      <button data-layer="scheme">Схема</button>
+    </div>
+    <button class="map-here" id="map-here" title="Моё местоположение">
+      <i class="ti ti-current-location"></i></button>
+  </div>
+  <div style="padding:12px calc(16px + var(--safe-r)) calc(12px + var(--safe-bot)) calc(16px + var(--safe-l));border-top:1px solid #E8E8E8">
+    <div class="map-hint" id="map-hint">Подвиньте карту так, чтобы булавка встала на ваш дом.</div>
+    <button class="btn" id="map-done">Готово</button>
+  </div>
 </div>
 
 <div class="tabs hidden" id="tabs">
