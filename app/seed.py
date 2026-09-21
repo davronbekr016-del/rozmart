@@ -7,7 +7,7 @@
 import json
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.db import SessionLocal
 from app.models import Category, Product, Variant
@@ -34,6 +34,26 @@ def seed_catalog() -> None:
             for variant in variants:
                 db.add(Variant(product_id=row["id"], **variant))
         db.commit()
+        _fix_sequences(db)
         print(f"Каталог залит: товаров {len(data['products'])}")
     finally:
         db.close()
+
+
+def _fix_sequences(db) -> None:
+    """Сдвигает счётчики id после заливки строк с явными идентификаторами.
+
+    Каталог приезжает с проставленными id — так сохраняются ссылки между
+    товарами и фасовками. PostgreSQL при вставке с явным id последовательность
+    не двигает, и следующая запись, добавленная уже без id (например, новинка
+    из REGOS), пытается занять id 1 и падает на конфликте первичного ключа.
+    SQLite таким не страдает, поэтому на разработке проблема не проявлялась.
+    """
+    if db.bind.dialect.name != "postgresql":
+        return
+    for table in ("categories", "products", "variants"):
+        db.execute(text(
+            f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), "
+            f"COALESCE((SELECT MAX(id) FROM {table}), 1))"
+        ))
+    db.commit()

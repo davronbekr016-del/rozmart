@@ -3,17 +3,17 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app import photos
 from app.db import get_db
 from app.models import Category, Product, Variant
 from app.schemas import CategoryOut, ProductDetailOut, ProductListOut, VariantOut
 
 router = APIRouter(prefix="/api", tags=["Каталог"])
 
-PHOTO_PATH = "/static/img/"
-
-
 def photo_url(filename: str | None) -> str | None:
-    return f"{PHOTO_PATH}{filename}" if filename else None
+    """Адрес картинки с отметкой версии — см. app/photos.py: без неё замена
+    фотографии неделю не доходила бы до покупателя из-за кеша."""
+    return photos.url(filename)
 
 
 def sellable_variants(product: Product) -> list[Variant]:
@@ -73,6 +73,7 @@ def get_products(category_id: int | None = None, db: Session = Depends(get_db)):
         result.append(
             ProductListOut(
                 id=p.id,
+                category_id=p.category_id,
                 name=p.name,
                 photo=photo_url(p.photo),
                 min_price=min(v.price for v in variants),

@@ -42,6 +42,11 @@ def save_customer(
     customer.name = data.customer_name
     customer.phone = data.phone
     customer.address = data.address
+    customer.house = data.house
+    customer.entrance = data.entrance
+    customer.flat = data.flat
+    customer.lat = data.lat
+    customer.lon = data.lon
     return customer
 
 
@@ -50,7 +55,9 @@ def to_out(customer: Customer | None, user: TelegramUser) -> ProfileOut:
         # имя знаем от Telegram, остальное спросим при первом заказе
         return ProfileOut(name=user.name, phone="", address="", consent=False)
     return ProfileOut(
-        name=customer.name, phone=customer.phone, address=customer.address, consent=True
+        name=customer.name, phone=customer.phone, address=customer.address,
+        house=customer.house, entrance=customer.entrance, flat=customer.flat,
+        lat=customer.lat, lon=customer.lon, consent=True
     )
 
 

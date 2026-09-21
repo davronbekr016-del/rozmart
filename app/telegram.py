@@ -35,6 +35,9 @@ CLOCK_SKEW_SECONDS = 60
 class TelegramUser(NamedTuple):
     id: int
     name: str
+    # @имя в Telegram. Есть не у всех: аккаунт без username — обычное дело,
+    # поэтому ни искать по нему людей, ни требовать его нельзя
+    username: str | None = None
 
 
 def check_configuration() -> None:
@@ -68,7 +71,11 @@ def check_init_data(init_data: str) -> TelegramUser | None:
             return None
         user = json.loads(fields["user"])
         name = " ".join(filter(None, [user.get("first_name"), user.get("last_name")]))
-        return TelegramUser(id=int(user["id"]), name=name.strip())
+        return TelegramUser(
+            id=int(user["id"]),
+            name=name.strip(),
+            username=(user.get("username") or "").strip() or None,
+        )
     except (AttributeError, KeyError, TypeError, ValueError):
         return None
 

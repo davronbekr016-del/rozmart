@@ -1,0 +1,954 @@
+"""Административная панель: товары и заказы (экраны SA-01 и SA-04).
+
+Вход — тот же, что у покупателя: подпись Telegram. Отдельных паролей нет
+намеренно, их пришлось бы хранить, восстанавливать и отзывать. Админом
+человека делает попадание его Telegram-id в ADMIN_TELEGRAM_IDS.
+
+Главная задача панели — разобрать то, что приехало из REGOS. Учётная система
+не знает про витрину: в ней каждая фасовка это отдельная позиция с складским
+названием вроде «RZ VAR. EKSTRA 400GR». Человек собирает из таких позиций
+витринную карточку: даёт название, фото, категорию и сводит фасовки вместе.
+"""
+import logging
+import os
+import re
+import shutil
+from datetime import timezone
+from pathlib import Path
+
+from fastapi import (
+    APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request,
+    Response, UploadFile,
+)
+from pydantic import BaseModel, Field
+from sqlalchemy import func, or_, select
+from sqlalchemy.orm import Session, selectinload
+
+from app import admin_auth, notify, order_status, photos, telegram
+from app.db import get_db
+from app.models import (AdminUser, Category, Notification, Order, Product,
+                        StaffChat, Variant)
+from app.telegram import TelegramUser, current_user
+
+log = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/admin", tags=["Администрирование"])
+
+# один источник правды о том, где лежат картинки — см. app/photos.py
+STATIC_IMG = photos.DIR
+
+# Кто допущен в панель. Пусто — панель закрыта для всех: пустой список прав
+# безопаснее, чем случайно открытая настройка.
+ADMIN_IDS = {
+    int(x) for x in os.getenv("ADMIN_TELEGRAM_IDS", "").replace(" ", "").split(",") if x
+}
+
+
+
+# Состояния и переходы — из общего модуля: витрина показывает покупателю
+# те же названия, и разойтись они больше не могут.
+ORDER_STATUSES = order_status.TEXT
+ALLOWED_TRANSITIONS = order_status.TRANSITIONS
+
+MAX_PHOTO_BYTES = 4 * 1024 * 1024
+PHOTO_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+
+
+def require_admin(
+    user: TelegramUser | None = Depends(current_user),
+    account: AdminUser | None = Depends(admin_auth.session_user),
+) -> TelegramUser:
+    """Пускает двумя путями: по паролю и по подписи Telegram.
+
+    Вход по паролю нужен, чтобы панель открывалась в обычном браузере
+    с компьютера. Вход через Telegram оставлен: администратору с телефона
+    заново вводить пароль незачем, подпись там уже есть.
+
+    В режиме разработки (TELEGRAM_AUTH_DISABLED=1) панель открыта: на своей
+    машине ни Telegram, ни заведённых учёток нет. Переменная задаётся явно,
+    а без неё приложение вообще откажется стартовать без токена бота, так что
+    случайно открытой на сервере эта дверь не окажется.
+    """
+    if account is not None:
+        return TelegramUser(id=0, name=account.full_name or account.username)
+    if telegram.AUTH_DISABLED:
+        return user or TelegramUser(id=0, name="разработка")
+    if user is not None and user.id in ADMIN_IDS:
+        return user
+    # 401, а не 404: панель открыта в браузере, и клиенту надо показать форму
+    # входа, а не делать вид, что страницы не существует
+    raise HTTPException(status_code=401, detail="Войдите в панель")
+
+
+class LoginIn(BaseModel):
+    username: str = Field(min_length=2, max_length=60)
+    password: str = Field(min_length=1, max_length=200)
+
+
+@router.post("/login")
+def do_login(
+    data: LoginIn,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """Вход по логину и паролю. Заводит сессию в куке."""
+    user = admin_auth.login(db, response, data.username, data.password)
+    return {"ok": True, "username": user.username, "name": user.full_name}
+
+
+@router.post("/logout")
+def do_logout(request: Request, response: Response, db: Session = Depends(get_db)):
+    admin_auth.logout(db, request, response)
+    return {"ok": True}
+
+
+@router.get("/whoami")
+def whoami(
+    user: TelegramUser | None = Depends(current_user),
+    account: AdminUser | None = Depends(admin_auth.session_user),
+):
+    """Кто открыл панель. Нужен, чтобы человека вообще можно было в неё впустить:
+    свой Telegram-id иначе взять неоткуда, а без него список администраторов
+    не заполнить. Ничего чужого метод не сообщает — только ваш собственный id.
+    """
+    if account is not None:
+        return {"authorized": True, "admin": True, "id": None,
+                "name": account.full_name or account.username, "via": "password"}
+    if user is None:
+        return {"authorized": False, "admin": telegram.AUTH_DISABLED, "id": None,
+                "hint": "Войдите по логину или откройте панель из Telegram"}
+    return {"authorized": True, "admin": user.id in ADMIN_IDS or telegram.AUTH_DISABLED,
+            "id": user.id, "name": user.name, "via": "telegram"}
+
+
+# ---------------------------------------------------------------- модели ответа
+
+
+class VariantRow(BaseModel):
+    id: int
+    external_code: str        # код REGOS, служебный — виден только администратору
+    weight: str
+    price: int | None
+    barcode: str | None
+    is_active: bool
+
+
+class ProductRow(BaseModel):
+    id: int
+    name: str
+    category_id: int
+    category: str
+    photo: str | None
+    is_active: bool
+    variant_count: int
+    min_price: int | None
+    sellable: bool            # есть ли хоть одна фасовка с ценой
+
+
+class ProductDetail(ProductRow):
+    description: str | None
+    composition: str | None
+    shelf_life: str | None
+    variants: list[VariantRow]
+
+
+class ProductPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=200)
+    category_id: int | None = None
+    description: str | None = Field(default=None, max_length=2000)
+    composition: str | None = Field(default=None, max_length=2000)
+    shelf_life: str | None = Field(default=None, max_length=100)
+    is_active: bool | None = None
+
+
+class OrderRow(BaseModel):
+    id: int
+    regos_document_id: int | None = None
+    number: str
+    status: str
+    status_text: str
+    created_at: str
+    customer_name: str
+    phone: str
+    total: int
+    item_count: int
+
+
+class OrderDetail(OrderRow):
+    regos_document_id: int | None = None
+    regos_error: str | None = None
+    regos_attempts: int = 0
+    # подключён ли покупатель к информационному боту. Оператору важно знать:
+    # если нет, о смене состояния он узнает, только открыв приложение
+    # @имя в Telegram, если оно у покупателя есть: по нему оператор напишет,
+    # когда человек не берёт трубку
+    telegram_username: str | None = None
+    # точка на карте, если покупатель её поставил при оформлении
+    lat: float | None = None
+    lon: float | None = None
+    address: str
+    delivery_slot: str
+    comment: str | None
+    payment_method: str
+    goods_total: int
+    delivery_price: int
+    items: list[dict]
+
+
+class StatusPatch(BaseModel):
+    status: str
+
+
+# ---------------------------------------------------------------- SA-01 товары
+
+
+def _min_price(product: Product) -> int | None:
+    prices = [v.price for v in product.variants if v.price is not None]
+    return min(prices) if prices else None
+
+
+def _row(product: Product) -> ProductRow:
+    price = _min_price(product)
+    return ProductRow(
+        id=product.id,
+        name=product.name,
+        category_id=product.category_id,
+        category=product.category.name,
+        photo=photos.url(product.photo),
+        is_active=product.is_active,
+        variant_count=len(product.variants),
+        min_price=price,
+        sellable=price is not None,
+    )
+
+
+@router.get("/products", response_model=list[ProductRow])
+def list_products(
+    status: str = Query("new", pattern="^(new|published|ready|all)$"),
+    q: str | None = None,
+    category_id: int | None = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    _: TelegramUser = Depends(require_admin),
+):
+    """Товары для разбора.
+
+    status:
+      new       — не опубликованные, то есть приехавшие из REGOS и ещё не разобранные
+      ready     — не опубликованные, но с ценой: их можно публиковать хоть сейчас
+      published — уже на витрине
+      all       — всё подряд
+    """
+    stmt = select(Product).options(
+        selectinload(Product.variants), selectinload(Product.category)
+    )
+    if status == "published":
+        stmt = stmt.where(Product.is_active)
+    elif status in ("new", "ready"):
+        stmt = stmt.where(~Product.is_active)
+    if category_id is not None:
+        stmt = stmt.where(Product.category_id == category_id)
+    if q:
+        # ищем и по витринному названию, и по коду REGOS: администратор чаще
+        # приходит из учётной системы с кодом на руках
+        like = f"%{q.strip()}%"
+        codes = select(Variant.product_id).where(Variant.external_code.ilike(like))
+        stmt = stmt.where(or_(Product.name.ilike(like), Product.id.in_(codes)))
+
+    rows = [_row(p) for p in db.scalars(stmt.order_by(Product.id))]
+    if status == "ready":
+        rows = [r for r in rows if r.sellable]
+    return rows[offset:offset + limit]
+
+
+@router.get("/products/count")
+def products_count(db: Session = Depends(get_db), _: TelegramUser = Depends(require_admin)):
+    """Счётчики для вкладок — считаются в базе, а не выкачиванием всех строк."""
+    total = db.scalar(select(func.count(Product.id)))
+    published = db.scalar(select(func.count(Product.id)).where(Product.is_active))
+    return {"total": total, "published": published, "hidden": total - published}
+
+
+@router.get("/products/{product_id}", response_model=ProductDetail)
+def get_product(
+    product_id: int,
+    db: Session = Depends(get_db),
+    _: TelegramUser = Depends(require_admin),
+):
+    product = db.get(Product, product_id)
+    if product is None:
+        raise HTTPException(status_code=404, detail="Товар не найден")
+    base = _row(product).model_dump()
+    return ProductDetail(
+        **base,
+        description=product.description,
+        composition=product.composition,
+        shelf_life=product.shelf_life,
+        variants=[
+            VariantRow(
+                id=v.id, external_code=v.external_code, weight=v.weight,
+                price=v.price, barcode=v.barcode, is_active=v.is_active,
+            )
+            for v in sorted(product.variants, key=lambda v: v.weight_grams)
+        ],
+    )
+
+
+@router.patch("/products/{product_id}", response_model=ProductDetail)
+def edit_product(
+    product_id: int,
+    data: ProductPatch,
+    db: Session = Depends(get_db),
+    _: TelegramUser = Depends(require_admin),
+):
+    """Правка витринной карточки.
+
+    Цены и остатки здесь не меняются намеренно: они приезжают из REGOS и любая
+    ручная правка будет затёрта ближайшей синхронизацией.
+    """
+    product = db.get(Product, product_id)
+    if product is None:
+        raise HTTPException(status_code=404, detail="Товар не найден")
+
+    fields = data.model_dump(exclude_unset=True)
+    if (category_id := fields.get("category_id")) is not None:
+        if db.get(Category, category_id) is None:
+            raise HTTPException(status_code=400, detail="Категория не найдена")
+
+    if fields.get("is_active"):
+        # BR-34 и BR-37: публикуем только то, что покупатель сможет купить
+        if _min_price(product) is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Нельзя опубликовать: ни у одной фасовки нет цены из REGOS",
+            )
+        if not (fields.get("name") or product.name).strip():
+            raise HTTPException(status_code=400, detail="Нельзя опубликовать без названия")
+
+    for key, value in fields.items():
+        setattr(product, key, value)
+    db.commit()
+    db.refresh(product)
+    return get_product(product_id, db)
+
+
+@router.post("/products/{product_id}/photo", response_model=ProductDetail)
+def upload_photo(
+    product_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _: TelegramUser = Depends(require_admin),
+):
+    """Фото карточки.
+
+    Файл называется по id товара, а не по коду REGOS: код — служебные данные
+    учётной системы, и в публичном адресе картинки ему делать нечего (BR-36).
+    """
+    product = db.get(Product, product_id)
+    if product is None:
+        raise HTTPException(status_code=404, detail="Товар не найден")
+
+    suffix = PHOTO_TYPES.get(file.content_type or "")
+    if suffix is None:
+        raise HTTPException(status_code=400, detail="Нужен JPEG, PNG или WebP")
+
+    STATIC_IMG.mkdir(parents=True, exist_ok=True)
+    previous = product.photo
+    target = STATIC_IMG / f"{product_id}{suffix}"
+    size = 0
+    with target.open("wb") as out:
+        while chunk := file.file.read(64 * 1024):
+            size += len(chunk)
+            if size > MAX_PHOTO_BYTES:
+                out.close()
+                target.unlink(missing_ok=True)
+                raise HTTPException(status_code=400, detail="Файл больше 4 МБ")
+            out.write(chunk)
+
+    product.photo = target.name
+    db.commit()
+    # прежний файл удаляем, только если он другого формата: иначе имя совпадает
+    # и мы бы стёрли только что записанную картинку
+    if previous and previous != target.name:
+        photos.remove(previous)
+    return get_product(product_id, db)
+
+
+@router.delete("/products/{product_id}/photo", response_model=ProductDetail)
+def delete_photo(
+    product_id: int,
+    db: Session = Depends(get_db),
+    _: TelegramUser = Depends(require_admin),
+):
+    """Убирает фотографию с карточки.
+
+    Товар при этом с витрины не снимается: карточка без картинки выглядит хуже,
+    но продаётся. Решение публиковать её или нет остаётся за администратором.
+    """
+    product = db.get(Product, product_id)
+    if product is None:
+        raise HTTPException(status_code=404, detail="Товар не найден")
+    previous = product.photo
+    product.photo = None
+    db.commit()
+    photos.remove(previous)
+    return get_product(product_id, db)
+
+
+@router.post("/variants/{variant_id}/move", response_model=ProductDetail)
+def move_variant(
+    variant_id: int,
+    target_product_id: int = Query(..., description="куда переносим фасовку"),
+    db: Session = Depends(get_db),
+    _: TelegramUser = Depends(require_admin),
+):
+    """Переносит фасовку в другую карточку.
+
+    Так из нескольких позиций REGOS собирается одна витринная карточка:
+    «Экстра варёная» — это четыре позиции по 400, 455, 700 и 855 грамм.
+    Опустевшая карточка удаляется, иначе в списке копятся пустышки.
+    """
+    variant = db.get(Variant, variant_id)
+    if variant is None:
+        raise HTTPException(status_code=404, detail="Фасовка не найдена")
+    target = db.get(Product, target_product_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="Карточка-получатель не найдена")
+    if variant.product_id == target_product_id:
+        raise HTTPException(status_code=400, detail="Фасовка уже в этой карточке")
+
+    source = db.get(Product, variant.product_id)
+    variant.product_id = target_product_id
+    db.flush()
+
+    remaining = db.scalar(
+        select(func.count(Variant.id)).where(Variant.product_id == source.id)
+    )
+    if remaining == 0:
+        db.delete(source)
+    db.commit()
+    return get_product(target_product_id, db)
+
+
+# ------------------------------------------------------------- категории
+
+
+@router.get("/categories")
+def list_categories(db: Session = Depends(get_db), _: TelegramUser = Depends(require_admin)):
+    counts = dict(
+        db.execute(
+            select(Product.category_id, func.count(Product.id)).group_by(Product.category_id)
+        ).all()
+    )
+    return [
+        {"id": c.id, "name": c.name, "sort_order": c.sort_order,
+         "product_count": counts.get(c.id, 0)}
+        for c in db.scalars(select(Category).order_by(Category.sort_order, Category.id))
+    ]
+
+
+# ---------------------------------------------------------------- SA-04 заказы
+
+
+def _order_row(order: Order) -> dict:
+    return {
+        "id": order.id,
+        "number": order.number,
+        "status": order.status,
+        "status_text": ORDER_STATUSES.get(order.status, order.status),
+        # пометка пояса обязательна: строку без неё JavaScript разбирает как
+        # местное время, и заказ показывается со сдвигом на часовой пояс
+        "created_at": order.created_at.replace(tzinfo=timezone.utc).isoformat(),
+        "customer_name": order.customer_name,
+        "phone": order.phone,
+        "total": order.total,
+        "item_count": len(order.items),
+        "regos_document_id": order.regos_document_id,
+    }
+
+
+@router.get("/orders", response_model=list[OrderRow])
+def list_orders(
+    status: str | None = None,
+    q: str | None = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    _: TelegramUser = Depends(require_admin),
+):
+    """Заказы, свежие сверху. Поиск по номеру, имени и телефону."""
+    stmt = select(Order).options(selectinload(Order.items)).order_by(Order.id.desc())
+    if status:
+        stmt = stmt.where(Order.status == status)
+    if q:
+        like = f"%{q.strip()}%"
+        stmt = stmt.where(or_(
+            Order.number.ilike(like),
+            Order.customer_name.ilike(like),
+            Order.phone.ilike(like),
+        ))
+    return [OrderRow(**_order_row(o)) for o in db.scalars(stmt.limit(limit).offset(offset))]
+
+
+@router.get("/orders/{order_id}", response_model=OrderDetail)
+def get_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    _: TelegramUser = Depends(require_admin),
+):
+    order = db.get(Order, order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Заказ не найден")
+    return OrderDetail(
+        **_order_row(order),
+        telegram_username=order.telegram_username,
+        lat=order.lat,
+        lon=order.lon,
+        regos_error=order.regos_error,
+        regos_attempts=order.regos_attempts,
+        address=order.address,
+        delivery_slot=order.delivery_slot,
+        comment=order.comment,
+        payment_method=order.payment_method,
+        goods_total=order.goods_total,
+        delivery_price=order.delivery_price,
+        items=[
+            {"product_name": i.product_name, "weight": i.weight,
+             "price": i.price, "quantity": i.quantity, "sum": i.price * i.quantity}
+            for i in order.items
+        ],
+    )
+
+
+@router.patch("/orders/{order_id}/status", response_model=OrderDetail)
+def set_order_status(
+    order_id: int,
+    data: StatusPatch,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    _: TelegramUser = Depends(require_admin),
+):
+    """Перевод заказа в следующее состояние.
+
+    Переходы ограничены: без этого выполненный заказ случайным нажатием
+    вернётся в сборку, и отчёты по выручке разойдутся с фактом.
+    """
+    order = db.get(Order, order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Заказ не найден")
+    if data.status not in ORDER_STATUSES:
+        raise HTTPException(status_code=400, detail="Неизвестное состояние")
+    allowed = ALLOWED_TRANSITIONS.get(order.status, set())
+    if data.status not in allowed:
+        current = ORDER_STATUSES.get(order.status, order.status)
+        raise HTTPException(
+            status_code=409,
+            detail=f"Из состояния «{current}» так перейти нельзя",
+        )
+    order.status = data.status
+    db.commit()
+    if order.status == "CANCELED":
+        # сотрудникам об отмене сообщаем отдельно: заказ мог быть уже в сборке
+        staff = notify.queue_staff(db, order, notify.staff_canceled(order, "в панели"))
+        if staff:
+            db.commit()
+            background.add_task(notify.send_many, [row.id for row in staff])
+        # отменённый заказ надо снять и с кассы, иначе его там соберут и выдадут.
+        # Тоже фоном: недоступный REGOS не повод отказывать оператору в отмене
+        if order.regos_document_id:
+            from app.regos.orders_push import cancel_one
+            background.add_task(cancel_one, order_id)
+    return get_order(order_id, db)
+
+
+@router.post("/orders/{order_id}/push")
+def push_order_to_regos(
+    order_id: int,
+    db: Session = Depends(get_db),
+    _: TelegramUser = Depends(require_admin),
+):
+    """Отправить заказ в REGOS вручную.
+
+    Нужно, когда автоматическая выгрузка исчерпала попытки или оператор
+    исправил причину отказа — например, дал товару код REGOS.
+    """
+    from app.regos.client import RegosClient, RegosError
+    from app.regos.orders_push import (
+        ConfirmError, OrderPushError, item_codes, push_order,
+    )
+
+    order = db.get(Order, order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Заказ не найден")
+    if order.regos_document_id:
+        return {"ok": True, "document_id": order.regos_document_id, "already": True}
+    if order.status == "CANCELED":
+        raise HTTPException(status_code=400, detail="Отменённый заказ в REGOS не передаётся")
+
+
+    order.regos_attempts += 1
+    try:
+        order.regos_document_id = push_order(
+            RegosClient(), order, item_codes(db, [order])
+        )
+        order.regos_error = None
+        db.commit()
+    except ConfirmError as exc:
+        # заказ в REGOS уже есть: запоминаем документ, иначе повтор заведёт дубль
+        order.regos_document_id = exc.document_id
+        order.regos_error = str(exc)[:500]
+        db.commit()
+        raise HTTPException(status_code=502, detail=str(exc))
+    except (OrderPushError, RegosError, RuntimeError, OSError) as exc:
+        order.regos_error = str(exc)[:500]
+        db.commit()
+        raise HTTPException(status_code=502, detail=str(exc))
+    return {"ok": True, "document_id": order.regos_document_id}
+
+
+@router.delete("/orders/{order_id}")
+def delete_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    _: TelegramUser = Depends(require_admin),
+):
+    """Удаляет заказ из витрины и снимает его в REGOS.
+
+    Удалить документ в REGOS через API нельзя — метод есть, но отвечает
+    ошибкой на любом документе (см. cancel_document). Поэтому там заказ
+    отменяется: для кассира это то же самое — по отменённому он ничего
+    не отгружает.
+
+    Если отменить не удалось, заказ не удаляем и здесь. Иначе на кассе остался
+    бы живой документ, о котором в витрине уже нечего вспомнить.
+
+    Удаление необратимо: заказ уходит из истории вместе с составом и суммой.
+    Это операция для тестовых и ошибочных заказов, а не способ убрать
+    неудобную выручку из отчётов.
+    """
+    from app.regos.client import RegosClient, RegosError
+    from app.regos.orders_push import cancel_document
+
+    order = db.get(Order, order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Заказ не найден")
+
+    regos = "в REGOS не выгружался"
+    if order.regos_document_id:
+        try:
+            done = cancel_document(RegosClient(), order.regos_document_id)
+        except (RegosError, RuntimeError, OSError) as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Заказ не удалён: в REGOS его снять не удалось. {exc}",
+            )
+        regos = {
+            "canceled": f"документ № {order.regos_document_id} отменён в REGOS",
+            "already": f"документ № {order.regos_document_id} в REGOS уже был отменён",
+            "missing": f"документа № {order.regos_document_id} в REGOS уже нет",
+        }[done]
+
+    number = order.number
+    # неотправленные сообщения об этом заказе больше не нужны: покупателю
+    # незачем получать «собираем ваш заказ» о том, чего уже нет
+    db.query(Notification).filter(Notification.order_id == order_id).delete()
+    db.delete(order)
+    db.commit()
+    log.info("Заказ %s удалён: %s", number, regos)
+    return {"deleted": number, "regos": regos}
+
+
+# --------------------------------------------- кому приходят заказы в Telegram
+
+
+@router.get("/notify/chats")
+def notify_chats(db: Session = Depends(get_db), _: TelegramUser = Depends(require_admin)):
+    """Чаты, которые знает информационный бот, и у кого из них есть доступ.
+
+    В списке два сорта записей: личные чаты тех, кто писал боту, и группы,
+    куда бота добавили. Доступ к заказам — это флаг, а не факт знакомства:
+    заказ с телефоном и адресом покупателя уходит только туда, где его
+    включили здесь.
+    """
+    rows = [{
+        "chat_id": chat.chat_id,
+        "title": chat.title or str(chat.chat_id),
+        "username": chat.username,
+        "kind": chat.kind,
+        "access": chat.active,
+    } for chat in db.scalars(select(StaffChat))]
+    rows.sort(key=lambda r: (not r["access"], r["kind"] != "group", r["title"].lower()))
+    return {"enabled": notify.enabled(), "bot": notify.bot_username(), "chats": rows}
+
+
+@router.post("/notify/chats/{chat_id}")
+def grant_notify_access(
+    chat_id: int,
+    db: Session = Depends(get_db),
+    _: TelegramUser = Depends(require_admin),
+):
+    """Включает чату получение всех заказов."""
+    chat = db.get(StaffChat, chat_id)
+    if chat is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Бот не знает этот чат. Попросите написать боту или добавить его в группу.",
+        )
+    chat.active = True
+    db.commit()
+    log.info("Чату %s (%s) выдан доступ к заказам", chat_id, chat.title)
+    return {"chat_id": chat_id, "access": True}
+
+
+@router.delete("/notify/chats/{chat_id}")
+def revoke_notify_access(
+    chat_id: int,
+    db: Session = Depends(get_db),
+    _: TelegramUser = Depends(require_admin),
+):
+    """Отключает чат от заказов. Запись не удаляем — чтобы можно было включить
+    обратно, не прося человека снова писать боту."""
+    chat = db.get(StaffChat, chat_id)
+    if chat is None:
+        raise HTTPException(status_code=404, detail="Такого чата нет в списке")
+    chat.active = False
+    db.commit()
+    log.info("Чат %s (%s) отключён от заказов", chat_id, chat.title)
+    return {"chat_id": chat_id, "access": False}
+
+
+@router.post("/regos/photos")
+def pull_regos_photos(
+    apply: bool = Query(False, description="false — только посчитать"),
+    db: Session = Depends(get_db),
+    _: TelegramUser = Depends(require_admin),
+):
+    """Подтягивает фотографии товаров из REGOS.
+
+    Только для карточек, у которых своего фото нет: снятое и обрезанное
+    вручную лучше того, что лежит в учётной системе, и затирать его нельзя.
+
+    Кнопкой, а не при синхронизации каталога: это десятки скачиваний,
+    а картинки в REGOS меняются раз в год.
+    """
+    from app.regos import config
+    from app.regos.client import RegosError
+    from app.regos.photos_sync import run
+
+    if not config.is_configured():
+        raise HTTPException(status_code=400, detail="Не задан ключ REGOS")
+    try:
+        return run(db, apply=apply)
+    except (RegosError, RuntimeError, OSError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+@router.get("/statuses")
+def statuses(_: TelegramUser = Depends(require_admin)):
+    return {"statuses": ORDER_STATUSES, "transitions": {
+        k: sorted(v) for k, v in ALLOWED_TRANSITIONS.items()}}
+
+
+# ------------------------------------------------- состав каталога и категории
+
+
+class GroupsPatch(BaseModel):
+    group_ids: list[int]
+
+
+class CategoryIn(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    sort_order: int = 0
+
+
+@router.get("/regos/groups")
+def regos_groups(db: Session = Depends(get_db), _: TelegramUser = Depends(require_admin)):
+    """Группы номенклатуры REGOS и сколько из каждой уже заведено в витрине.
+
+    Список тянется из учётной системы: он там меняется, и держать его копию
+    значило бы показывать администратору устаревшее. Счётчики — из своей базы,
+    по ним видно, что именно приедет, если группу включить.
+    """
+    from app.regos import config as regos_config
+    from app.regos.catalog_sync import selected_groups
+    from app.regos.client import RegosClient, RegosError
+
+    local = dict(
+        db.execute(
+            select(Variant.regos_group_id, func.count(Variant.id))
+            .group_by(Variant.regos_group_id)
+        ).all()
+    )
+    chosen = set(selected_groups(db))
+
+    groups: list[dict] = []
+    error = None
+    if regos_config.is_configured():
+        try:
+            groups = [
+                {"id": g["id"], "name": g.get("path") or g.get("name") or str(g["id"]),
+                 "selected": g["id"] in chosen, "in_catalog": local.get(g["id"], 0)}
+                for g in RegosClient().paginate("ItemGroup/Get")
+            ]
+            groups.sort(key=lambda g: (-g["in_catalog"], g["name"]))
+        except (RegosError, RuntimeError, OSError) as exc:
+            # REGOS недоступен — панель всё равно должна открыться и показать,
+            # что уже выбрано: иначе сбой учётной системы блокирует работу
+            error = str(exc)
+    else:
+        error = "Не задан REGOS_KEY"
+
+    return {"groups": groups, "selected": sorted(chosen),
+            "unassigned": local.get(None, 0), "error": error}
+
+
+@router.put("/regos/groups")
+def set_regos_groups(
+    data: GroupsPatch,
+    db: Session = Depends(get_db),
+    _: TelegramUser = Depends(require_admin),
+):
+    """Какие группы REGOS попадают в витрину. Пустой список — весь каталог."""
+    from app.regos.catalog_sync import save_groups
+
+    save_groups(db, data.group_ids)
+    return {"selected": sorted(set(data.group_ids))}
+
+
+class AutoPushPatch(BaseModel):
+    enabled: bool
+
+
+@router.get("/regos/auto")
+def get_auto_push(db: Session = Depends(get_db), _: TelegramUser = Depends(require_admin)):
+    """Состояние автоотправки и готова ли она вообще работать."""
+    from app.regos.orders_push import auto_push_enabled, auto_push_ready
+
+    ready, reason = auto_push_ready(db)
+    return {"enabled": auto_push_enabled(db), "ready": ready, "reason": reason}
+
+
+@router.put("/regos/auto")
+def set_auto_push(
+    data: AutoPushPatch,
+    db: Session = Depends(get_db),
+    _: TelegramUser = Depends(require_admin),
+):
+    """Включает или выключает отправку заказа в REGOS сразу после оформления."""
+    from app.regos.orders_push import auto_push_ready, save_auto_push
+
+    if data.enabled:
+        ready, reason = auto_push_ready(db)
+        if not ready:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Автоотправку включить нельзя: {reason}. "
+                       "Иначе заказы будут уходить в никуда.",
+            )
+    save_auto_push(db, data.enabled)
+    return {"enabled": data.enabled}
+
+
+@router.post("/cleanup")
+def cleanup(
+    apply: bool = Query(False, description="false — только посчитать"),
+    db: Session = Depends(get_db),
+    _: TelegramUser = Depends(require_admin),
+):
+    """Убирает из витрины карточки, которые не относятся к выбранным группам.
+
+    Удаляются только никогда не публиковавшиеся карточки: опубликованный товар
+    админ снимает с витрины сам, осознанно. Если на фасовку ссылается заказ,
+    внешний ключ стоит на RESTRICT и удаление не пройдёт — история заказов
+    защищена самой схемой, а не аккуратностью этого кода.
+
+    По умолчанию только считает. Удаление — apply=true.
+    """
+    from app.regos.catalog_sync import selected_groups
+
+    groups = selected_groups(db)
+    if not groups:
+        raise HTTPException(
+            status_code=400,
+            detail="Группы не выбраны: удалять нечего, сейчас в витрину идёт весь каталог",
+        )
+
+    # карточка лишняя, если ни одна её фасовка не входит в выбранные группы
+    keep = select(Variant.product_id).where(Variant.regos_group_id.in_(groups))
+    stmt = select(Product).where(~Product.is_active, Product.id.notin_(keep))
+    doomed = list(db.scalars(stmt))
+
+    if not apply:
+        return {"count": len(doomed), "applied": False,
+                "sample": [p.name for p in doomed[:10]]}
+
+    removed, blocked = 0, 0
+    for product in doomed:
+        try:
+            db.delete(product)
+            db.flush()
+            removed += 1
+        except Exception:               # noqa: BLE001 — на позицию ссылается заказ
+            db.rollback()
+            blocked += 1
+    db.commit()
+    return {"count": len(doomed), "removed": removed, "blocked": blocked, "applied": True}
+
+
+@router.post("/categories")
+def add_category(
+    data: CategoryIn,
+    db: Session = Depends(get_db),
+    _: TelegramUser = Depends(require_admin),
+):
+    if db.scalar(select(Category).where(Category.name == data.name)):
+        raise HTTPException(status_code=400, detail="Категория с таким названием уже есть")
+    category = Category(name=data.name.strip(), sort_order=data.sort_order)
+    db.add(category)
+    db.commit()
+    return {"id": category.id, "name": category.name, "sort_order": category.sort_order}
+
+
+@router.patch("/categories/{category_id}")
+def edit_category(
+    category_id: int,
+    data: CategoryIn,
+    db: Session = Depends(get_db),
+    _: TelegramUser = Depends(require_admin),
+):
+    category = db.get(Category, category_id)
+    if category is None:
+        raise HTTPException(status_code=404, detail="Категория не найдена")
+    other = db.scalar(select(Category).where(
+        Category.name == data.name, Category.id != category_id))
+    if other:
+        raise HTTPException(status_code=400, detail="Категория с таким названием уже есть")
+    category.name = data.name.strip()
+    category.sort_order = data.sort_order
+    db.commit()
+    return {"id": category.id, "name": category.name, "sort_order": category.sort_order}
+
+
+@router.delete("/categories/{category_id}")
+def delete_category(
+    category_id: int,
+    db: Session = Depends(get_db),
+    _: TelegramUser = Depends(require_admin),
+):
+    """Удаляет пустую категорию. С товарами — не даёт: внешний ключ стоит
+    на RESTRICT, и товары иначе осиротели бы."""
+    category = db.get(Category, category_id)
+    if category is None:
+        raise HTTPException(status_code=404, detail="Категория не найдена")
+    count = db.scalar(
+        select(func.count(Product.id)).where(Product.category_id == category_id)
+    )
+    if count:
+        raise HTTPException(
+            status_code=400,
+            detail=f"В категории {count} товаров — сначала перенесите их в другую",
+        )
+    db.delete(category)
+    db.commit()
+    return {"deleted": category_id}

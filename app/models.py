@@ -1,6 +1,17 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, String, Text, false, func
+
+def utcnow() -> datetime:
+    """Текущее время в UTC без пояса.
+
+    В колонках лежит наивное время, и весь код считает его UTC. Полагаться на
+    server_default=func.now() для этого нельзя: PostgreSQL возвращает время
+    в поясе сервера, а он не обязан быть UTC — на боевой машине стоял
+    Europe/Amsterdam, и заказы записывались на два часа вперёд.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+from sqlalchemy import BigInteger, DateTime, ForeignKey, String, Text, false, func, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -48,6 +59,9 @@ class Variant(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"))
     external_code: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    # группа номенклатуры в REGOS. Нужна, чтобы администратор мог отбирать
+    # товары по группам учётной системы и убирать лишние из витрины
+    regos_group_id: Mapped[int | None] = mapped_column(index=True)
     weight: Mapped[str] = mapped_column(String(50))
     # для сортировки фасовок в карточке: «455 г» строкой сортируется бессмысленно
     weight_grams: Mapped[int] = mapped_column(default=0, server_default="0")
@@ -61,6 +75,67 @@ class Variant(Base):
     product: Mapped["Product"] = relationship(back_populates="variants")
 
 
+class AdminUser(Base):
+    """Администратор панели. Пароль хранится хешем PBKDF2, см. app/admin_auth.py."""
+
+    __tablename__ = "admin_users"
+
+    username: Mapped[str] = mapped_column(String(60), primary_key=True)
+    password_hash: Mapped[str] = mapped_column(String(200))
+    full_name: Mapped[str | None] = mapped_column(String(120))
+    is_active: Mapped[bool] = mapped_column(default=True, server_default="1")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class AdminSession(Base):
+    """Открытая сессия панели.
+
+    Сессии лежат в базе, а не в подписанной куке, чтобы их можно было отозвать:
+    смена пароля закрывает все открытые сессии, иначе украденная кука работала
+    бы до истечения срока.
+    """
+
+    __tablename__ = "admin_sessions"
+
+    token: Mapped[str] = mapped_column(String(64), primary_key=True)
+    username: Mapped[str] = mapped_column(String(60), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class Setting(Base):
+    """Настройки, которыми управляет администратор из панели.
+
+    В переменных окружения им не место: там значения задаёт тот, у кого есть
+    доступ к серверу, и на каждое изменение нужен перезапуск службы. Выбор
+    групп номенклатуры, попадающих в витрину, меняет контент-менеджер.
+    """
+
+    __tablename__ = "settings"
+
+    name: Mapped[str] = mapped_column(String(60), primary_key=True)
+    value: Mapped[str] = mapped_column(Text)
+
+
+class Counter(Base):
+    """Счётчик номеров заказов.
+
+    Номер нельзя выводить из id строки: id известен только после вставки, а до
+    этого в number приходится класть пустую строку. На SQLite это сходит с рук,
+    потому что запись сериализуется, а на PostgreSQL два одновременных заказа
+    сталкиваются на уникальном индексе по одной и той же пустой строке —
+    и второй покупатель получает ошибку на ровном месте.
+
+    Отдельный счётчик снимает проблему: номер выдаётся атомарно, до вставки,
+    и заказ сразу пишется со своим окончательным номером (BR-05).
+    """
+
+    __tablename__ = "counters"
+
+    name: Mapped[str] = mapped_column(String(40), primary_key=True)
+    value: Mapped[int]
+
+
 class Customer(Base):
     """Покупатель. Заводится при первом заказе, чтобы телефон и адрес
     не приходилось набирать заново каждый раз."""
@@ -72,11 +147,20 @@ class Customer(Base):
     name: Mapped[str] = mapped_column(String(200))
     phone: Mapped[str] = mapped_column(String(30))
     address: Mapped[str] = mapped_column(Text)
+    # дом, подъезд и квартира — отдельно, чтобы подставлять их в следующий заказ
+    # и чтобы их не приходилось выискивать в одной длинной строке
+    house: Mapped[str | None] = mapped_column(String(20))
+    entrance: Mapped[str | None] = mapped_column(String(20))
+    flat: Mapped[str | None] = mapped_column(String(20))
+    # точка на карте, если покупатель её поставил. Адрес строкой она не заменяет:
+    # по координатам курьер находит дом, а по тексту — подъезд и квартиру
+    lat: Mapped[float | None]
+    lon: Mapped[float | None]
     # FR-1.13: согласие на обработку данных берётся один раз и фиксируется.
     # Поле обязательное — значит записи о покупателе без согласия не бывает
     consent_at: Mapped[datetime] = mapped_column(DateTime)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), onupdate=func.now()
+        DateTime, default=utcnow, onupdate=utcnow, server_default=func.now()
     )
 
 
@@ -95,10 +179,19 @@ class Order(Base):
     # аккаунт Telegram, из которого оформили заказ: по нему покупатель видит
     # свои заказы. BigInteger — идентификаторы Telegram давно вышли за 2 млрд
     telegram_id: Mapped[int | None] = mapped_column(BigInteger, index=True)
+    # @имя покупателя, если оно у него есть. Нужно оператору и курьеру: по нему
+    # можно написать человеку в Telegram, когда он не берёт трубку. Имя можно
+    # сменить в любой момент, поэтому оно сохраняется вместе с заказом — как
+    # было на момент оформления, а не подтягивается заново
+    telegram_username: Mapped[str | None] = mapped_column(String(64))
 
     customer_name: Mapped[str] = mapped_column(String(200))
     phone: Mapped[str] = mapped_column(String(30))
     address: Mapped[str] = mapped_column(Text)
+    # точка на карте на момент заказа. Профиль покупателя потом меняется,
+    # а везти надо было туда, куда он показал при оформлении
+    lat: Mapped[float | None]
+    lon: Mapped[float | None]
     delivery_slot: Mapped[str] = mapped_column(String(60))
     comment: Mapped[str | None] = mapped_column(Text)
     payment_method: Mapped[str] = mapped_column(String(20))
@@ -108,7 +201,16 @@ class Order(Base):
     delivery_price: Mapped[int]
     total: Mapped[int]
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, server_default=func.now()
+    )
+
+    # Выгрузка в REGOS. Отправка идёт после оформления и вне запроса покупателя:
+    # недоступная учётная система не должна мешать людям заказывать.
+    # id документа — признак «уже выгружен», по нему же видно, что искать в REGOS.
+    regos_document_id: Mapped[int | None] = mapped_column(index=True)
+    regos_error: Mapped[str | None] = mapped_column(Text)
+    regos_attempts: Mapped[int] = mapped_column(default=0, server_default="0")
 
     items: Mapped[list["OrderItem"]] = relationship(
         back_populates="order", cascade="all, delete-orphan"
@@ -131,3 +233,54 @@ class OrderItem(Base):
     quantity: Mapped[int]
 
     order: Mapped["Order"] = relationship(back_populates="items")
+    # фасовка нужна, чтобы показать покупателю фото товара в его заказе.
+    # Название и цена берутся из самой строки — они зафиксированы на момент
+    # заказа (BR-09), а фото не фиксируем: это та же вещь, снятая заново
+    variant: Mapped["Variant"] = relationship()
+
+
+class StaffChat(Base):
+    """Чат, куда уходят все заказы: личный чат сотрудника или общая группа.
+
+    Отдельная таблица, а не флаг у подписчика: группа — это не человек,
+    у неё нет telegram_id пользователя, а chat_id отрицательный. И права
+    у этих двух подписок разные: покупателю приходит только его заказ,
+    сюда — все, вместе с телефоном и адресом. Поэтому попасть сюда можно
+    только по коду из админ-панели.
+    """
+
+    __tablename__ = "staff_chats"
+
+    chat_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    title: Mapped[str | None] = mapped_column(String(200))
+    # @имя, если оно есть: по нему администратор узнаёт человека в списке
+    username: Mapped[str | None] = mapped_column(String(64))
+    # 'private' — личный чат сотрудника, 'group' — общая группа
+    kind: Mapped[str] = mapped_column(String(20), default="private")
+    added_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    active: Mapped[bool] = mapped_column(default=True, server_default=true())
+
+
+class Notification(Base):
+    """Очередь сообщений покупателю.
+
+    Сообщение не отправляется прямо из обработчика запроса по двум причинам:
+    недоступный Telegram задержал бы ответ покупателю, а перезапуск службы
+    посреди отправки потерял бы сообщение молча. Строка живёт до отправки,
+    отправляет её отдельный поток.
+    """
+
+    __tablename__ = "notifications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    telegram_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    # чат из staff_chats, куда уходит сообщение
+    chat_id: Mapped[int | None] = mapped_column(BigInteger)
+    # SET NULL: удаление заказа не должно уносить с собой историю переписки
+    order_id: Mapped[int | None] = mapped_column(ForeignKey("orders.id", ondelete="SET NULL"))
+    kind: Mapped[str] = mapped_column(String(30))
+    text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime)
+    attempts: Mapped[int] = mapped_column(default=0, server_default="0")
+    error: Mapped[str | None] = mapped_column(Text)

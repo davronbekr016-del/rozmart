@@ -1,13 +1,14 @@
 """Оформление заказа."""
 from datetime import timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Response
-from sqlalchemy import select
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from app import notify, order_status, photos
 from app.db import get_db
-from app.models import Order, OrderItem, Variant
+from app.models import Counter, Order, OrderItem, Variant
 from app.profile import save_customer
 from app.schemas import OrderIn, OrderItemOut, OrderOut
 from app.telegram import TelegramUser, buyer, require_user
@@ -18,45 +19,95 @@ router = APIRouter(prefix="/api", tags=["Заказы"])
 # Значение подтверждает заказчик; когда появится админка — переедет в настройки (FR-13.6).
 DELIVERY_PRICE = 12000
 
-# заказ с оплатой наличными сразу уходит в магазин, онлайн — ждёт подтверждения
-# платежа и передаётся на сборку только после него (BR-13)
-STATUS_BY_PAYMENT = {"cash": "CONFIRMED", "online": "NEW"}
+STATUS_BY_PAYMENT = order_status.BY_PAYMENT
 
 # розница: больше сотни одинаковых пачек — это уже опт, такие заказы идут через оператора
 MAX_ITEM_QUANTITY = 99
 
-# служебный код состояния покупателю ни о чём не говорит. Остальные состояния
-# из спецификации появятся вместе с рабочим местом оператора, который их ставит
-STATUS_TEXT = {"NEW": "Ждёт оплаты", "CONFIRMED": "Принят"}
+# Состояния описаны в app/order_status.py — оттуда же их берёт панель оператора.
+# Держать здесь свой список нельзя: ровно так покупатель однажды увидел
+# «В работе» вместо «Отменён».
 
 
-def build_order_number(order_id: int) -> str:
+ORDER_COUNTER = "order_number"
+ORDER_NUMBER_BASE = 8000
+
+
+def build_order_number(value: int) -> str:
     """RB-8001, RB-8002 … Номер присваивается один раз и не меняется (BR-05)."""
-    return f"RB-{8000 + order_id}"
+    return f"RB-{value}"
+
+
+def next_order_number(db: Session) -> str:
+    """Выдаёт следующий номер заказа. Атомарно и до вставки строки.
+
+    UPDATE ... RETURNING берёт на строке счётчика блокировку до конца
+    транзакции, поэтому два одновременных заказа получают разные номера,
+    а не спорят за один. Раньше номер выводился из id строки, из-за чего до
+    вставки в number лежала пустая строка — на PostgreSQL одновременные заказы
+    ломались об уникальный индекс по ней.
+
+    Счётчик заводится при первом заказе и начинается выше уже существующих
+    номеров: база могла быть заполнена, когда нумерация шла от id.
+    """
+    value = db.scalar(
+        update(Counter)
+        .where(Counter.name == ORDER_COUNTER)
+        .values(value=Counter.value + 1)
+        .returning(Counter.value)
+    )
+    if value is None:
+        start = max(ORDER_NUMBER_BASE, (db.scalar(select(func.max(Order.id))) or 0) + ORDER_NUMBER_BASE)
+        db.add(Counter(name=ORDER_COUNTER, value=start + 1))
+        db.flush()
+        value = start + 1
+    return build_order_number(value)
+
+
+ITEMS_WITH_PHOTO = selectinload(Order.items).selectinload(OrderItem.variant).selectinload(
+    Variant.product
+)
 
 
 def find_by_client_key(db: Session, client_key: str) -> Order | None:
     return db.scalar(
-        select(Order).where(Order.client_key == client_key).options(selectinload(Order.items))
+        select(Order).where(Order.client_key == client_key).options(ITEMS_WITH_PHOTO)
     )
+
+
+def item_photo(item: OrderItem) -> str | None:
+    """Фото товара для строки заказа.
+
+    Берётся из карточки, а не из самой строки: название и цена в заказе
+    зафиксированы на момент оформления (BR-09), а фото — просто изображение
+    той же вещи, и показывать устаревшее незачем. Если карточку успели удалить,
+    остаёмся без картинки, но заказ всё равно читается.
+    """
+    variant = item.variant
+    photo = variant.product.photo if variant is not None and variant.product else None
+    return photos.url(photo)
 
 
 def to_out(order: Order) -> OrderOut:
     return OrderOut(
         number=order.number,
         status=order.status,
-        status_text=STATUS_TEXT.get(order.status, "В работе"),
+        status_text=order_status.text(order.status),
         # в базе время без пояса, но оно всегда UTC: помечаем явно, иначе
         # телефон покажет его как местное и промахнётся на пять часов
         created_at=order.created_at.replace(tzinfo=timezone.utc),
         delivery_slot=order.delivery_slot,
         payment_method=order.payment_method,
+        address=order.address,
+        phone=order.phone,
+        comment=order.comment,
         goods_total=order.goods_total,
         delivery_price=order.delivery_price,
         total=order.total,
         items=[
             OrderItemOut(
-                product_name=i.product_name, weight=i.weight, price=i.price, quantity=i.quantity
+                product_name=i.product_name, weight=i.weight, price=i.price,
+                quantity=i.quantity, photo=item_photo(i),
             )
             for i in order.items
         ],
@@ -66,6 +117,7 @@ def to_out(order: Order) -> OrderOut:
 @router.post("/orders", response_model=OrderOut, status_code=201)
 def create_order(
     data: OrderIn,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     user: TelegramUser | None = Depends(buyer),
 ):
@@ -105,13 +157,17 @@ def create_order(
         raise HTTPException(status_code=400, detail="В корзине есть товары, которых больше нет")
 
     order = Order(
-        number="",
+        number=next_order_number(db),
         status=STATUS_BY_PAYMENT[data.payment_method],
         client_key=client_key,
         telegram_id=telegram_id,
+        telegram_username=user.username if user else None,
         customer_name=data.customer_name,
         phone=data.phone,
-        address=data.address,
+        # в заказе адрес лежит одной строкой: его читают курьер, касса и REGOS
+        address=data.full_address(),
+        lat=data.lat,
+        lon=data.lon,
         delivery_slot=data.delivery_slot,
         comment=data.comment,
         payment_method=data.payment_method,
@@ -160,8 +216,6 @@ def create_order(
 
     db.add(order)
     try:
-        db.flush()                               # получаем id, чтобы собрать номер
-        order.number = build_order_number(order.id)
         db.commit()
     except IntegrityError:
         # два одинаковых запроса пришли одновременно: заказ уже создал первый
@@ -170,6 +224,22 @@ def create_order(
         if already is None or already.telegram_id != telegram_id:
             raise
         return to_out(already)
+
+    # Заказ — сотрудникам магазина в Telegram: с контактами и адресом, потому
+    # что по этому сообщению его и собирают. Кладём в очередь и отправляем
+    # фоном: покупатель должен увидеть экран с номером заказа сразу, а не
+    # после того, как ответит Telegram.
+    staff = notify.queue_staff(db, order, notify.staff_new_order(order))
+    if staff:
+        db.commit()
+        background.add_task(notify.send_many, [row.id for row in staff])
+
+    # По умолчанию заказ передаёт оператор кнопкой в панели: он сперва смотрит
+    # на заказ. Если в панели включена автоотправка — уходит сам, но всё равно
+    # после ответа покупателю: недоступная учётная система не должна мешать
+    # оформлению. Не получилось — заказ останется в панели с текстом ошибки.
+    from app.regos.orders_push import push_one
+    background.add_task(push_one, order.id)
     return to_out(order)
 
 
@@ -187,7 +257,7 @@ def my_orders(
         .where(Order.telegram_id == user.id)
         .order_by(Order.id.desc())
         .limit(20)
-        .options(selectinload(Order.items))
+        .options(ITEMS_WITH_PHOTO)
     )
     return [to_out(order) for order in orders]
 

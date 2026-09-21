@@ -51,6 +51,9 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def init_db() -> None:
-    from app import models  # noqa: F401  — регистрирует модели в метаданных
+    from app import migrate, models  # noqa: F401  — регистрирует модели в метаданных
 
     Base.metadata.create_all(engine)
+    # create_all создаёт недостающие таблицы, но не добавляет колонки
+    # в существующие. На сервере база уже заполнена и пересоздать её нельзя.
+    migrate.apply()

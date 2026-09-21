@@ -26,6 +26,9 @@ class ProductListOut(BaseModel):
     """Карточка в списке каталога: один товар, цена «от» (BR-37)."""
 
     id: int
+    # категорию отдаём вместе с товаром: по ней приложение восстанавливает
+    # выбранный отбор, не спрашивая сервер второй раз
+    category_id: int
     name: str
     photo: str | None
     min_price: int
@@ -61,9 +64,28 @@ class ContactIn(BaseModel):
 
     customer_name: str = Field(min_length=2, max_length=200)
     phone: str = Field(min_length=9, max_length=30)
+    # улица с ориентиром: то, что приходит с карты или пишется руками
     address: str = Field(min_length=5, max_length=500)
+    # Дом, подъезд и квартира отдельными полями. Раньше всё это писали одной
+    # строкой, и половина заказов приходила без квартиры: в длинной строке
+    # её просто забывали. Номер дома приходит с карты, остальное — руками.
+    house: str | None = Field(default=None, max_length=20)
+    entrance: str | None = Field(default=None, max_length=20)
+    flat: str | None = Field(default=None, max_length=20)
+    # Точка на карте. Необязательна: карта есть не у всех под рукой, и адрес
+    # строкой остаётся главным. Границы проверяем, чтобы в базу не попало
+    # что попало из подменённого запроса — вплоть до NaN.
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lon: float | None = Field(default=None, ge=-180, le=180)
     # согласие на обработку данных. Спрашивается один раз, дальше уже дано
     consent: bool = False
+
+    @field_validator("lat", "lon")
+    @classmethod
+    def round_point(cls, value):
+        # шести знаков хватает на точность около 10 см: всё, что дальше, —
+        # шум от пальца на экране, и в базе ему делать нечего
+        return None if value is None else round(value, 6)
 
     @field_validator("phone")
     @classmethod
@@ -74,16 +96,38 @@ class ContactIn(BaseModel):
         return f"+{digits}"
 
     # before: иначе длину проверят до обрезки и строка из одних пробелов пройдёт
-    @field_validator("customer_name", "address", mode="before")
+    @field_validator("customer_name", "address", "house", "entrance", "flat",
+                     mode="before")
     @classmethod
     def strip_text(cls, value):
         return value.strip() if isinstance(value, str) else value
+
+    def full_address(self) -> str:
+        """Адрес одной строкой — для курьера, кассы и учётной системы.
+
+        Собирается на сервере, а не на телефоне: строка уходит и в REGOS,
+        и в сообщение сотрудникам, и в карточку заказа, и выглядеть везде
+        должна одинаково.
+        """
+        parts = [self.address]
+        if self.house:
+            parts.append(f"дом {self.house}")
+        if self.entrance:
+            parts.append(f"подъезд {self.entrance}")
+        if self.flat:
+            parts.append(f"кв. {self.flat}")
+        return ", ".join(parts)
 
 
 class ProfileOut(BaseModel):
     name: str
     phone: str
     address: str
+    house: str | None = None
+    entrance: str | None = None
+    flat: str | None = None
+    lat: float | None = None
+    lon: float | None = None
     consent: bool
 
 
@@ -104,6 +148,7 @@ class OrderItemOut(BaseModel):
     weight: str
     price: int
     quantity: int
+    photo: str | None = None
 
 
 class OrderOut(BaseModel):
@@ -113,6 +158,11 @@ class OrderOut(BaseModel):
     created_at: datetime
     delivery_slot: str
     payment_method: str
+    # куда и кому везли — покупатель смотрит это в карточке своего заказа,
+    # чтобы проверить адрес и вспомнить, что просил в комментарии
+    address: str
+    phone: str
+    comment: str | None = None
     goods_total: int
     delivery_price: int
     total: int
