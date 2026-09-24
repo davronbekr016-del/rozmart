@@ -1,0 +1,11 @@
+# Код едет на Linux-сервер архивом прямо из рабочей копии. На Windows Git
+# по умолчанию выписывает файлы с окончаниями CRLF, и они попадали на сервер
+# в таком виде: Python это терпит, а shell-скрипт с CRLF на Linux не запустится
+# вовсе («$'\r': command not found»). Поэтому в рабочей копии всегда LF.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
