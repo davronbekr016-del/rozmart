@@ -167,3 +167,7 @@ class OrderOut(BaseModel):
     delivery_price: int
     total: int
     items: list[OrderItemOut]
+    # оплачен ли картой: по этому приложение решает, показывать ли «Оплатить»
+    paid: bool = False
+    # до какого времени неоплаченный заказ живёт — потом отменяется сам
+    pay_until: datetime | None = None

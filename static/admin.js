@@ -343,6 +343,19 @@
     });
   }
 
+  // Про деньги — без полутонов: «онлайн» без слова «оплачено» кассир
+  // прочитал бы как «оплатит онлайн когда-нибудь»
+  function paymentText(o) {
+    if (o.payment_method === 'cash') return 'наличные курьеру';
+    if (!o.paid_at) {
+      return o.status === 'CANCELED' ? 'картой — не оплачен, заказ отменён'
+                                     : 'картой — ждёт оплаты';
+    }
+    var when = new Date(o.paid_at).toLocaleString('ru-RU');
+    return 'картой — ОПЛАЧЕНО ' + when + ', ' + money(o.paid_amount)
+      + ' · платёж ' + (o.provider_charge_id || o.payment_charge_id);
+  }
+
   function openOrder(id) {
     api('/orders/' + id).then(function (o) {
       document.getElementById('paneTtl').textContent = 'Заказ ' + o.number;
@@ -364,7 +377,7 @@
        ['На карте', o.lat != null ? o.lat.toFixed(6) + ', ' + o.lon.toFixed(6) : 'не указана',
         o.lat != null ? 'https://maps.google.com/?q=' + o.lat + ',' + o.lon : null],
        ['Доставка', o.delivery_slot],
-       ['Оплата', o.payment_method === 'cash' ? 'наличные' : 'онлайн'],
+       ['Оплата', paymentText(o)],
        ['Комментарий', o.comment || '—'],
        ['Оформлен', new Date(o.created_at).toLocaleString('ru-RU')]
       ].forEach(function (pair) {
@@ -429,6 +442,8 @@
       }
 
       (state.transitions[o.status] || []).forEach(function (code) {
+        // сервер всё равно откажет, но показывать заведомо невозможное — врать
+        if (code === 'CONFIRMED' && o.awaiting_payment) return;
         var b = el('button', 'act ' + (code === 'CANCELED' ? 'ghost' : ''),
                    state.statuses[code]);
         b.onclick = function () {

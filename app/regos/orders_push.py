@@ -117,8 +117,18 @@ def build_payload(order: Order, item_ids: dict[int, str],
 
 def _description(order: Order) -> str:
     """Комментарий покупателя и срок доставки — оператору в REGOS они нужнее
-    всего, а отдельных полей под них в документе нет."""
-    parts = [f"ROZMART {order.number}", order.customer_name, order.delivery_slot]
+    всего, а отдельных полей под них в документе нет.
+
+    У оплаченного картой пометка стоит первой и заглавными: примечание — это
+    всё, что кассир и курьер видят о деньгах. Способ оплаты «Пласт. карта»
+    сам по себе не говорит, что деньги уже получены.
+    """
+    parts = []
+    if order.paid_at is not None:
+        from app import payments
+        parts.append("ТЕСТ! ОПЛАЧЕНО ОНЛАЙН (ТЕСТОВАЯ ОПЛАТА), ДЕНЬГИ НЕ БРАТЬ"
+                     if payments.is_test() else "ОПЛАЧЕНО ОНЛАЙН, ДЕНЬГИ НЕ БРАТЬ")
+    parts += [f"ROZMART {order.number}", order.customer_name, order.delivery_slot]
     if order.comment:
         parts.append(order.comment.strip())
     return " | ".join(p for p in parts if p)

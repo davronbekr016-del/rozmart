@@ -45,11 +45,24 @@ COLUMNS = [
     ("customers", "house", "VARCHAR(20)"),
     ("customers", "entrance", "VARCHAR(20)"),
     ("customers", "flat", "VARCHAR(20)"),
+    # оплата картой
+    ("orders", "paid_at", "TIMESTAMP"),
+    ("orders", "payment_charge_id", "VARCHAR(128)"),
+    ("orders", "provider_charge_id", "VARCHAR(128)"),
+    ("orders", "paid_amount", "INTEGER"),
+    ("orders", "checkout_at", "TIMESTAMP"),
 ]
 
 INDEXES = [
     ("ix_variants_regos_group_id", "variants", "regos_group_id"),
     ("ix_orders_regos_document_id", "orders", "regos_document_id"),
+]
+
+# Уникальные индексы отдельно: на них держится защита от двойного проведения
+# платежа, и создаются они другой командой. NULL уникальности не мешает —
+# и в PostgreSQL, и в SQLite неоплаченных заказов может быть сколько угодно.
+UNIQUE_INDEXES = [
+    ("ux_orders_payment_charge_id", "orders", "payment_charge_id"),
 ]
 
 
@@ -75,3 +88,17 @@ def apply() -> None:
                 continue
             log.info("Создаю индекс %s", name)
             conn.execute(text(f"CREATE INDEX {name} ON {table} ({column})"))
+
+        for name, table, column in UNIQUE_INDEXES:
+            if table not in existing_tables:
+                continue
+            found = inspect(engine)
+            # индекс мог появиться и сам: create_all создаёт его для новой таблицы
+            indexes = {i["name"] for i in found.get_indexes(table)}
+            uniques = {tuple(u["column_names"]) for u in found.get_unique_constraints(table)}
+            if name in indexes or (column,) in uniques or any(
+                    i.get("unique") and i["column_names"] == [column]
+                    for i in found.get_indexes(table)):
+                continue
+            log.info("Создаю уникальный индекс %s", name)
+            conn.execute(text(f"CREATE UNIQUE INDEX {name} ON {table} ({column})"))

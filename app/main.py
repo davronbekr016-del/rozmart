@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.admin import router as admin_router
-from app import admin_auth, notify
+from app import admin_auth, notify, payments
 from app.bot import router as bot_router
 from app.catalog import router as catalog_router
 from app.db import get_db, init_db
@@ -17,6 +17,7 @@ from app.orders import router as orders_router
 from app.profile import router as profile_router
 from app.regos import orders_sync
 from app.seed import seed_catalog
+from app.shop_bot import router as shop_router
 from sqlalchemy.orm import Session
 from app.telegram import check_configuration
 
@@ -40,6 +41,8 @@ async def lifespan(app: FastAPI):
     # и ещё один поток забирает статусы заказов из REGOS: кассир меняет их там,
     # а покупатель смотрит сюда
     orders_sync.start_worker()
+    # и третий отменяет заказы, не оплаченные картой вовремя
+    payments.start_worker()
     yield
 
 
@@ -66,6 +69,7 @@ app.include_router(catalog_router)
 app.include_router(geocode_router)
 app.include_router(orders_router)
 app.include_router(profile_router)
+app.include_router(shop_router)
 
 
 @app.get("/", include_in_schema=False)

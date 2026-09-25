@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from app import admin_auth, notify, order_status, photos, telegram
+from app import admin_auth, notify, order_status, payments, photos, telegram
 from app.db import get_db
 from app.models import (AdminUser, Category, Notification, Order, Product,
                         StaffChat, Variant)
@@ -186,6 +186,13 @@ class OrderDetail(OrderRow):
     # точка на карте, если покупатель её поставил при оформлении
     lat: float | None = None
     lon: float | None = None
+    # оплата картой: когда, сколько и под каким номером платёж у Telegram и Click
+    paid_at: str | None = None
+    paid_amount: int | None = None
+    payment_charge_id: str | None = None
+    provider_charge_id: str | None = None
+    # ждёт оплаты картой — подтвердить его вручную нельзя
+    awaiting_payment: bool = False
     address: str
     delivery_slot: str
     comment: str | None
@@ -505,6 +512,11 @@ def get_order(
         telegram_username=order.telegram_username,
         lat=order.lat,
         lon=order.lon,
+        paid_at=order.paid_at.replace(tzinfo=timezone.utc).isoformat() if order.paid_at else None,
+        paid_amount=order.paid_amount,
+        payment_charge_id=order.payment_charge_id,
+        provider_charge_id=order.provider_charge_id,
+        awaiting_payment=payments.awaiting_payment(order),
         regos_error=order.regos_error,
         regos_attempts=order.regos_attempts,
         address=order.address,
@@ -539,6 +551,14 @@ def set_order_status(
         raise HTTPException(status_code=404, detail="Заказ не найден")
     if data.status not in ORDER_STATUSES:
         raise HTTPException(status_code=400, detail="Неизвестное состояние")
+    # Неоплаченный заказ с оплатой картой подтверждать нельзя: подтверждённый
+    # уходит кассиру, и тот отдаст товар, за который никто не платил.
+    # Подтверждает такой заказ только уведомление об оплате от Telegram
+    if data.status == "CONFIRMED" and payments.awaiting_payment(order):
+        raise HTTPException(
+            status_code=409,
+            detail="Заказ не оплачен картой. Он подтвердится сам, когда придёт оплата",
+        )
     allowed = ALLOWED_TRANSITIONS.get(order.status, set())
     if data.status not in allowed:
         current = ORDER_STATUSES.get(order.status, order.status)

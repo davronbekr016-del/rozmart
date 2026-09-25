@@ -6,12 +6,12 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from app import notify, order_status, photos
+from app import notify, order_status, payments, photos
 from app.db import get_db
 from app.models import Counter, Order, OrderItem, Variant
 from app.profile import save_customer
 from app.schemas import OrderIn, OrderItemOut, OrderOut
-from app.telegram import TelegramUser, buyer, require_user
+from app.telegram import TelegramUser, buyer, current_user, require_user
 
 router = APIRouter(prefix="/api", tags=["Заказы"])
 
@@ -104,6 +104,9 @@ def to_out(order: Order) -> OrderOut:
         goods_total=order.goods_total,
         delivery_price=order.delivery_price,
         total=order.total,
+        paid=order.paid_at is not None,
+        pay_until=(until.replace(tzinfo=timezone.utc)
+                   if (until := payments.pay_until(order)) else None),
         items=[
             OrderItemOut(
                 product_name=i.product_name, weight=i.weight, price=i.price,
@@ -133,6 +136,15 @@ def create_order(
             if already.telegram_id == telegram_id:
                 return to_out(already)
             client_key = None
+
+    # Оплату картой проверяет сервер, а не витрина: скрыть кнопку — не защита.
+    # Пока токен тестовый, платить картой могут только тестировщики — иначе
+    # любой «оплатит» заказ тестовой картой и получит товар даром
+    if data.payment_method == "online" and not payments.available_for(telegram_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Оплата картой пока недоступна. Выберите оплату наличными.",
+        )
 
     quantities: dict[int, int] = {}
     for item in data.items:
@@ -229,7 +241,10 @@ def create_order(
     # что по этому сообщению его и собирают. Кладём в очередь и отправляем
     # фоном: покупатель должен увидеть экран с номером заказа сразу, а не
     # после того, как ответит Telegram.
-    staff = notify.queue_staff(db, order, notify.staff_new_order(order))
+    # Заказ с оплатой картой — только после оплаты (app/shop_bot.py): собирать
+    # неоплаченный незачем, а пометка «оплачено» появится там же
+    staff = ([] if order.payment_method == "online"
+             else notify.queue_staff(db, order, notify.staff_new_order(order)))
     if staff:
         db.commit()
         background.add_task(notify.send_many, [row.id for row in staff])
@@ -241,6 +256,50 @@ def create_order(
     from app.regos.orders_push import push_one
     background.add_task(push_one, order.id)
     return to_out(order)
+
+
+@router.post("/orders/{number}/invoice")
+def order_invoice(
+    number: str,
+    db: Session = Depends(get_db),
+    user: TelegramUser = Depends(require_user),
+):
+    """Счёт на оплату заказа картой.
+
+    Выставляется заново при каждом нажатии «Оплатить»: закрытое без оплаты
+    окно — не повод оформлять заказ повторно.
+    """
+    order = db.scalar(
+        select(Order).where(Order.number == number).options(selectinload(Order.items))
+    )
+    # чужой заказ отвечает так же, как несуществующий: по ответу не должно
+    # быть видно, что заказ с таким номером у кого-то есть
+    if order is None or order.telegram_id != user.id:
+        raise HTTPException(status_code=404, detail="Заказ не найден")
+    if order.payment_method != "online":
+        raise HTTPException(status_code=409, detail="Заказ оформлен с оплатой наличными")
+    if order.paid_at is not None:
+        raise HTTPException(status_code=409, detail="Заказ уже оплачен")
+    if order.status != "NEW":
+        raise HTTPException(status_code=409, detail="Заказ отменён — оплатить его нельзя")
+    if not payments.available_for(user.id):
+        raise HTTPException(status_code=409, detail="Оплата картой сейчас недоступна")
+    try:
+        return {"link": payments.create_invoice_link(order)}
+    except payments.PaymentError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+@router.get("/payment-options")
+def payment_options(user: TelegramUser | None = Depends(current_user)):
+    """Каким способом этому человеку можно платить. Витрина по этому ответу
+    решает, показывать ли «Онлайн картой»: кнопка, которая ничего не делает,
+    хуже её отсутствия."""
+    return {
+        "card": payments.available_for(user.id if user else None),
+        "test": payments.is_test(),
+        "unpaid_minutes": payments.UNPAID_MINUTES,
+    }
 
 
 @router.get("/my-orders", response_model=list[OrderOut])

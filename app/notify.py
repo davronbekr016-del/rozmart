@@ -66,8 +66,12 @@ def enabled() -> bool:
     return bool(TOKEN)
 
 
-def call(method: str, payload: dict) -> dict:
+def call(method: str, payload: dict, token: str | None = None) -> dict:
     """Запрос к Bot API. Возвращает result, на отказ поднимает NotifyError.
+
+    token — чужой токен, если спрашиваем не от имени служебного бота. Им
+    пользуется оплата: счёт выставляет магазинный бот, а разбирать его
+    ответы надо ровно так же.
 
     Telegram отвечает содержательной ошибкой в теле и ставит код состояния
     4xx, из-за которого urllib поднимает HTTPError раньше, чем мы прочитаем
@@ -76,7 +80,7 @@ def call(method: str, payload: dict) -> dict:
     заблокировал ли покупатель бота или неверен токен.
     """
     request = urllib.request.Request(
-        API.format(token=TOKEN, method=method),
+        API.format(token=token or TOKEN, method=method),
         data=json.dumps(payload).encode(),
         headers={"Content-Type": "application/json"},
     )
@@ -164,6 +168,16 @@ def map_link(order: Order) -> str | None:
     return f"https://maps.google.com/?q={order.lat},{order.lon}"
 
 
+def payment_line(order: Order) -> str:
+    """Строка об оплате. У оплаченного картой — крупно и без двусмысленности:
+    курьер, который возьмёт деньги второй раз, — худшее, что тут может быть."""
+    if order.paid_at is not None:
+        from app import payments
+        test = " (ТЕСТОВАЯ ОПЛАТА — денег не поступало)" if payments.is_test() else ""
+        return f"💳 <b>ОПЛАЧЕНО КАРТОЙ — деньги с покупателя не брать</b>{test}"
+    return f"💵 {PAYMENT_TEXT.get(order.payment_method, esc(order.payment_method))}"
+
+
 def staff_new_order(order: Order) -> str:
     lines = [
         f"🆕 Новый заказ <b>{esc(order.number)}</b> — {money(order.total)}",
@@ -185,7 +199,7 @@ def staff_new_order(order: Order) -> str:
         f"📍 {esc(order.address)}"
         + (f' — <a href="{map_link(order)}">точка на карте</a>' if map_link(order) else ""),
         f"🕐 {esc(order.delivery_slot)}",
-        f"💳 {PAYMENT_TEXT.get(order.payment_method, esc(order.payment_method))}",
+        payment_line(order),
     ]
     if order.comment:
         lines.append(f"📝 {esc(order.comment)}")
@@ -195,8 +209,12 @@ def staff_new_order(order: Order) -> str:
 def staff_canceled(order: Order, source: str) -> str:
     """source — откуда пришла отмена: «в панели», «из REGOS». Сотруднику важно
     знать, чьё это действие: своё или кассы."""
-    return (f"❌ Заказ <b>{esc(order.number)}</b> отменён ({esc(source)})\n"
+    text = (f"❌ Заказ <b>{esc(order.number)}</b> отменён ({esc(source)})\n"
             f"{esc(order.customer_name)} · {esc(order.phone)} · {money(order.total)}")
+    if order.paid_at is not None:
+        # возвраты на пилоте ручные: без этой строки про деньги покупателя забудут
+        text += "\n⚠️ <b>Заказ был оплачен картой — нужен возврат покупателю</b>"
+    return text
 
 
 def staff_chats(db) -> list[StaffChat]:

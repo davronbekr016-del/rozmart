@@ -22,6 +22,9 @@ const state = {
   payment: "cash",
   sending: false,     // защита от повторной отправки заказа
   orders: [],         // загруженные заказы покупателя
+  cardAvailable: false,  // можно ли этому покупателю платить картой — решает сервер
+  unpaidMinutes: 30,     // через сколько минут неоплаченный заказ отменяется
+  paying: false,         // окно оплаты уже открывается
   point: { f: null, p: null },   // точка на карте: f — в заказе, p — в профиле
   // адрес, который мы сами подставили в поле. Нужен, чтобы отличить его
   // от набранного руками и не затереть чужой текст
@@ -476,7 +479,7 @@ function renderCheckout() {
       <i class="ti ${state.slot === name ? "ti-circle-check" : "ti-circle"}"></i>
     </div>`).join("");
 
-  el("payments").innerHTML = PAYMENTS.map(([code, name, icon]) => `
+  el("payments").innerHTML = availablePayments().map(([code, name, icon]) => `
     <div class="opt ${state.payment === code ? "on" : ""}" data-payment="${code}">
       <span style="font-size:14px"><i class="ti ${icon}" style="color:#E30613"></i> ${esc(name)}</span>
       <i class="ti ${state.payment === code ? "ti-circle-check" : "ti-circle"}"></i>
@@ -569,9 +572,13 @@ async function submitOrder() {
       throw Object.assign(new Error("Заказ отправлен. Найдите его в «Моих заказах»."),
         { forUser: true });
     }
+    state.orders = [body, ...(state.orders || []).filter((o) => o.number !== body.number)];
     renderDone(body);
     show("done");
     if (state.profile) loadProfile();   // сервер запомнил данные — подтянем их обратно
+    // заказ с оплатой картой создан и ждёт оплаты — сразу открываем окно;
+    // закроет без оплаты — на экране останется кнопка «Оплатить»
+    if (body.payment_method === "online") payOrder(body.number);
   } catch (error) {
     console.error(error);
     // обрыв связи даёт техническое «Failed to fetch» — покупателю такое не показываем
@@ -584,29 +591,51 @@ async function submitOrder() {
   }
 }
 
-function renderDone(order) {
-  const paid = order.payment_method === "online";
+/* Экран после оформления. Режимы:
+ *   cash     — наличные: заказ сразу принят;
+ *   awaiting — картой, ещё не оплачен: кнопка «Оплатить»;
+ *   checking — окно оплаты закрылось с «paid», ждём подтверждения сервера;
+ *   paid     — сервер подтвердил оплату;
+ *   slow     — подтверждение задерживается: скажем, где смотреть статус.
+ * «Оплачено» показываем только по слову сервера — не по статусу окна. */
+function renderDone(order, mode) {
+  const card = order.payment_method === "online";
+  mode = mode || (card ? (order.paid ? "paid" : "awaiting") : "cash");
+  const view = {
+    cash: ["ti-check", "Заказ принят",
+      "Мы уже собираем ваш заказ.<br>Курьер свяжется перед доставкой."],
+    paid: ["ti-check", "Оплачено, заказ принят",
+      "Деньги получены, магазин начал сборку.<br>Курьеру платить не нужно."],
+    awaiting: ["ti-credit-card", "Заказ ждёт оплаты",
+      `Оплатите картой — после этого магазин начнёт сборку.<br>${esc(payUntilText(order))}`],
+    checking: ["ti-loader-2", "Проверяем оплату…", "Это займёт несколько секунд."],
+    slow: ["ti-clock", "Оплата проверяется",
+      "Как только банк подтвердит платёж, статус обновится в «Моих заказах»."],
+  }[mode];
+  const spin = mode === "checking" ? "animation:spin 1s linear infinite;" : "";
+  const sumLabel = mode === "paid" ? "Оплачено" : (card ? "К оплате" : "Оплата курьеру");
+
   el("done-body").innerHTML = `
     <div style="text-align:center">
       <div style="width:82px;height:82px;border-radius:50%;background:#E30613;color:#fff;display:flex;align-items:center;justify-content:center;font-size:40px;margin:0 auto 20px">
-        <i class="ti ti-check"></i></div>
-      <div style="font-size:23px;font-weight:600;margin-bottom:8px">Заказ принят</div>
-      <div class="mut" style="margin-bottom:22px;line-height:1.65">
-        ${paid ? "Ожидаем оплату, после неё магазин начнёт сборку." : "Мы уже собираем ваш заказ.<br>Курьер свяжется перед доставкой."}
-      </div>
+        <i class="ti ${view[0]}" style="${spin}"></i></div>
+      <div style="font-size:23px;font-weight:600;margin-bottom:8px">${view[1]}</div>
+      <div class="mut" style="margin-bottom:22px;line-height:1.65">${view[2]}</div>
     </div>
+    ${mode === "awaiting" ? `<button class="btn" data-pay="${esc(order.number)}" style="margin-bottom:14px">
+      Оплатить${order.total ? " " + money(order.total) : ""}</button>` : ""}
     <div class="card" style="background:#F7F7F7;text-align:center">
       <div class="mut" style="font-size:12px;margin-bottom:4px">Номер заказа</div>
       <div style="font-size:21px;font-weight:600;letter-spacing:.6px">${esc(order.number)}</div>
     </div>
-    <div class="card" style="background:#F7F7F7">
+    ${order.items.length ? `<div class="card" style="background:#F7F7F7">
       <div class="row" style="margin-bottom:9px"><span class="mut">Состав</span>
         <span style="font-size:13px">${order.items.length} ${plural(order.items.length, "позиция", "позиции", "позиций")}</span></div>
-      <div class="row" style="margin-bottom:9px"><span class="mut">${paid ? "К оплате" : "Оплата курьеру"}</span>
+      <div class="row" style="margin-bottom:9px"><span class="mut">${sumLabel}</span>
         <span class="prc" style="font-size:13px">${money(order.total)}</span></div>
       <div class="row"><span class="mut">Доставка</span>
         <span style="font-size:13px">${esc(order.delivery_slot)}</span></div>
-    </div>`;
+    </div>` : ""}`;
 }
 
 // ---------- профиль ----------
@@ -816,6 +845,11 @@ function orderCard(order) {
         <span class="mut" style="font-size:12px">${esc(when)}</span>
       </div>
       ${tracker(order)}
+      ${awaitingPayment(order) ? `
+        <button class="btn" data-pay="${esc(order.number)}" style="padding:11px;margin:6px 0 8px">
+          Оплатить ${money(order.total)}</button>
+        <div class="mut" style="font-size:12px;text-align:center;margin-bottom:6px">
+          ${esc(payUntilText(order))}</div>` : ""}
       <div class="row">
         <span class="mut" style="font-size:12px">
           ${order.items.length} ${plural(order.items.length, "позиция", "позиции", "позиций")}
@@ -836,7 +870,11 @@ function openOrder(number) {
   const when = new Date(order.created_at).toLocaleString("ru-RU", {
     day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
   });
-  const paid = order.payment_method === "online";
+  const card = order.payment_method === "online";
+  const paymentText = !card ? "наличными курьеру"
+    : order.paid ? "картой — оплачено"
+    : order.status === "CANCELED" ? "картой — не оплачен"
+    : "картой — ждёт оплаты";
 
   el("order-body").innerHTML = `
     <div class="card">
@@ -845,6 +883,11 @@ function openOrder(number) {
         <span class="ord-big prc">${money(order.total)}</span>
       </div>
       ${tracker(order, true)}
+      ${awaitingPayment(order) ? `
+        <button class="btn" data-pay="${esc(order.number)}" style="margin-top:6px">
+          Оплатить ${money(order.total)}</button>
+        <div class="mut" style="font-size:12px;text-align:center;margin-top:8px">
+          ${esc(payUntilText(order))}</div>` : ""}
     </div>
 
     <div class="card">
@@ -870,7 +913,7 @@ function openOrder(number) {
       <div class="ord-row"><span class="k">Время</span>
         <span class="v">${esc(order.delivery_slot)}</span></div>
       <div class="ord-row"><span class="k">Оплата</span>
-        <span class="v">${paid ? "онлайн картой" : "наличными курьеру"}</span></div>
+        <span class="v">${paymentText}</span></div>
       ${order.comment ? `<div class="ord-row"><span class="k">Комментарий</span>
         <span class="v">${esc(order.comment)}</span></div>` : ""}
     </div>`;
@@ -1400,6 +1443,111 @@ document.addEventListener("touchend", async () => {
   }
 }, { passive: true });
 
+// ---------- оплата картой ----------
+
+/* Покупатель платит в окне Telegram (openInvoice), не выходя из приложения.
+ *
+ * Статус, который возвращает окно, — это только «как закрылось окно». Правда
+ * о деньгах приходит серверу от Telegram отдельным уведомлением, поэтому после
+ * «paid» мы не рисуем «оплачено» сразу, а спрашиваем сервер, пока он не
+ * подтвердит. Иначе покупатель увидел бы «оплачено» у заказа, который кассир
+ * не получит.
+ */
+
+async function loadPaymentOptions() {
+  try {
+    const options = await api("/api/payment-options");
+    state.cardAvailable = Boolean(options.card);
+    state.unpaidMinutes = options.unpaid_minutes || 30;
+  } catch (error) {
+    console.error(error);
+    state.cardAvailable = false;   // не узнали — не предлагаем
+  }
+  // выбранная раньше карта могла стать недоступной — не оставляем её выбранной
+  if (!state.cardAvailable && state.payment === "online") state.payment = "cash";
+  if (state.screen === "checkout") renderCheckout();
+}
+
+function availablePayments() {
+  return PAYMENTS.filter(([code]) => code !== "online" || state.cardAvailable);
+}
+
+/** Выставляет счёт и открывает окно оплаты. */
+async function payOrder(number) {
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if (!tg || !tg.openInvoice) {
+    return note("Оплатить картой можно только в приложении Telegram.");
+  }
+  if (state.paying) return;          // двойное нажатие открыло бы два окна
+  state.paying = true;
+  try {
+    const { link } = await api(`/api/orders/${encodeURIComponent(number)}/invoice`,
+      { method: "POST" });
+    tg.openInvoice(link, (status) => {
+      state.paying = false;
+      afterInvoice(number, status);
+    });
+  } catch (error) {
+    state.paying = false;
+    console.error(error);
+    note(error.detail || "Не удалось открыть оплату. Попробуйте ещё раз.");
+  }
+}
+
+/** Что показать после окна оплаты. */
+async function afterInvoice(number, status) {
+  if (status === "paid" || status === "pending") {
+    renderDone(orderStub(number), "checking");
+    show("done");
+    const order = await waitForPayment(number);
+    return renderDone(order || orderStub(number), order && order.paid ? "paid" : "slow");
+  }
+  // закрыли окно или платёж не прошёл: заказ жив и ждёт оплаты
+  const order = await fetchMyOrder(number);
+  renderDone(order || orderStub(number), "awaiting");
+  show("done");
+  if (status === "failed") note("Оплата не прошла. Можно попробовать ещё раз.");
+}
+
+/** Ждёт, пока сервер получит подтверждение оплаты от Telegram. */
+async function waitForPayment(number) {
+  // обычно уведомление приходит за секунду-две; 30 секунд — с большим запасом
+  for (let attempt = 0; attempt < 15; attempt += 1) {
+    const order = await fetchMyOrder(number);
+    if (order && (order.paid || order.status !== "NEW")) return order;
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  return fetchMyOrder(number);
+}
+
+async function fetchMyOrder(number) {
+  try {
+    const orders = await api("/api/my-orders");
+    state.orders = orders;
+    return orders.find((o) => o.number === number) || null;
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
+}
+
+/** Заглушка на случай, когда заказ не удалось перечитать: номер есть всегда. */
+function orderStub(number) {
+  const known = (state.orders || []).find((o) => o.number === number);
+  return known || { number, items: [], total: 0, delivery_slot: "", payment_method: "online" };
+}
+
+function awaitingPayment(order) {
+  return order.payment_method === "online" && !order.paid && order.status === "NEW";
+}
+
+function payUntilText(order) {
+  if (!order.pay_until) return "";
+  const until = new Date(order.pay_until).toLocaleTimeString("ru-RU",
+    { hour: "2-digit", minute: "2-digit" });
+  return `Без оплаты заказ отменится в ${until}.`;
+}
+
 // ---------- переключение экранов ----------
 
 const SCREENS = ["catalog", "product", "cart", "checkout", "done", "orders", "profile",
@@ -1487,6 +1635,9 @@ document.addEventListener("click", (event) => {
   }
   if (event.target.closest("#back")) return show("catalog");
   if (event.target.closest("#add")) return addToCart();
+
+  const payButton = event.target.closest("[data-pay]");
+  if (payButton) return payOrder(payButton.dataset.pay);
 
   const orderCardEl = event.target.closest("[data-order]");
   if (orderCardEl) return openOrder(orderCardEl.dataset.order);
@@ -1604,6 +1755,8 @@ function setupTelegram() {
   el("tab-profile").classList.remove("hidden");
   // имя придёт от Telegram, телефон и адрес — из прошлого заказа, если он был
   loadProfile();
+  // можно ли этому покупателю платить картой — решает сервер
+  loadPaymentOptions();
 }
 
 async function start() {
