@@ -45,7 +45,8 @@ def text(status: str) -> str:
     return TEXT.get(status, status)
 
 
-def move(db, order, to: str, *, unpaid_only: bool = False, values: dict | None = None) -> bool:
+def move(db, order, to: str, *, unpaid_only: bool = False, values: dict | None = None,
+         where: list | None = None) -> bool:
     """Переводит заказ в состояние to — только если он всё ещё в том, в котором
     мы его прочитали. Возвращает, удалось ли.
 
@@ -57,7 +58,13 @@ def move(db, order, to: str, *, unpaid_only: bool = False, values: dict | None =
     = прочитанный, — и проигравший узнаёт об этом по нулю изменённых строк.
 
     unpaid_only — ещё и «пока не оплачен»: так уведомление об оплате не проведёт
-    платёж дважды, а автоотмена не отменит оплаченный.
+    платёж дважды, а автоотмена не отменит оплаченный. where — прочие условия,
+    которые должны быть верны в момент записи, а не в момент чтения.
+
+    После записи объект перечитывается из базы — и при успехе, и при неудаче.
+    По умолчанию SQLAlchemy применила бы UPDATE к объекту в памяти по его
+    старому статусу даже тогда, когда в базе не изменилась ни одна строка,
+    и код, прочитавший потом order.status, увидел бы состояние, которого нет.
     """
     from sqlalchemy import update
 
@@ -66,5 +73,10 @@ def move(db, order, to: str, *, unpaid_only: bool = False, values: dict | None =
     stmt = update(Order).where(Order.id == order.id, Order.status == order.status)
     if unpaid_only:
         stmt = stmt.where(Order.paid_at.is_(None))
-    changed = db.execute(stmt.values(status=to, **(values or {}))).rowcount
+    for condition in where or []:
+        stmt = stmt.where(condition)
+    stmt = stmt.values(status=to, **(values or {})).execution_options(
+        synchronize_session=False)
+    changed = db.execute(stmt).rowcount
+    db.refresh(order)
     return changed == 1

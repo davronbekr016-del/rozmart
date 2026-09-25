@@ -441,7 +441,12 @@ def push_one(order_id: int) -> None:
                 log.warning("Автоотправка заказа %s пропущена: %s", order_id, reason)
             return
 
-        order = db.get(Order, order_id)
+        # Блокировка строки на время выгрузки. Выгрузку одного заказа могут
+        # запустить дважды почти одновременно — автоотправка и повтор
+        # уведомления об оплате, автоотправка и кнопка оператора. Обе увидели бы
+        # «документа ещё нет» и обе создали бы документ: у кассира два заказа.
+        # Второй ждёт первого и видит уже выгруженный заказ
+        order = db.get(Order, order_id, with_for_update=True)
         if order is None or order.regos_document_id or order.status not in PUSHABLE:
             return
 

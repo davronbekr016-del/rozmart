@@ -22,7 +22,7 @@ import os
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from app import notify, payments
@@ -176,9 +176,19 @@ async def shop_webhook(
 
     try:
         return await run_in_threadpool(process, db, background, update)
-    except Exception:                       # noqa: BLE001
+    except (OperationalError, DBAPIError, OSError, TimeoutError):
+        # Сбой временный: база или сеть. 500 — просьба к Telegram повторить.
+        # Для уведомления об оплате это единственный способ его не потерять
         db.rollback()
-        log.exception("Не разобрали обновление магазинного бота — Telegram повторит")
-        # 500 — просьба повторить. Для уведомления об оплате это единственный
-        # способ его не потерять
+        log.exception("Временный сбой при разборе обновления — Telegram повторит")
         return JSONResponse({"ok": False}, status_code=500)
+    except Exception:                       # noqa: BLE001
+        # Ошибка, которая повтором не лечится: кривые данные или ошибка в коде.
+        # 500 здесь означал бы бесконечные повторы одного и того же обновления,
+        # а оно, по всей видимости, задержит и следующие — запросы перед
+        # списанием у других покупателей уйдут в тайм-аут. Поэтому «ок»
+        # и громко в журнал: такой платёж разбирает человек
+        db.rollback()
+        log.exception("ОБНОВЛЕНИЕ МАГАЗИННОГО БОТА НЕ РАЗОБРАНО, повтор не поможет: %s",
+                      str(update)[:500])
+        return {"ok": True}

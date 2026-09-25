@@ -608,7 +608,9 @@ def push_order_to_regos(
         PUSHABLE, ConfirmError, OrderPushError, item_codes, push_order,
     )
 
-    order = db.get(Order, order_id)
+    # та же блокировка строки, что у автоотправки: кнопка оператора и фоновая
+    # выгрузка одного заказа не должны завести два документа у кассира
+    order = db.get(Order, order_id, with_for_update=True)
     if order is None:
         raise HTTPException(status_code=404, detail="Заказ не найден")
     if order.regos_document_id:

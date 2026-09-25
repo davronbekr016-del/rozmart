@@ -279,8 +279,9 @@ check("R1", "«Утверждён» с кассы не делает неопла
 # 2. сбой при проведении платежа — 500, повтор проводит
 import app.payments as _pay  # noqa: E402
 real_record = _pay.record_payment
+from sqlalchemy.exc import OperationalError  # noqa: E402
 def broken(*a, **kw):
-    raise RuntimeError("база недоступна")
+    raise OperationalError("UPDATE orders", {}, Exception("база недоступна"))
 _pay.record_payment = broken
 r = order("online"); nr2 = r.json()["number"]
 resp = paid(nr2, 77000 * 100, charge="tg-retry")
@@ -337,6 +338,43 @@ o11 = fresh(nr2)                                             # оплачен и
 ans = pre_checkout(nr2, 77000 * 100, qid="q-busy")
 check("R11", "Отказ перед оплатой по оплаченному заказу — «уже оплачен», а не «отменён»",
       ans["ok"] is False and "уже оплачен" in ans["error_message"])
+
+# ======================================================= повторное ревью
+# A. синхронизация двигает старые онлайн-заказы, законно стоящие у кассы
+r = order("online"); na = r.json()["number"]
+oa = fresh(na); oa.status = "CONFIRMED"; oa.regos_document_id = 999; db.commit()
+check("A", "Старый онлайн-заказ у кассы касса двигает, как раньше («В обработке» → собирается)",
+      target_status(fresh(na), {"id": 24, "name": "В обработке"}) == "ASSEMBLING")
+
+# B. неудачная условная запись не врёт в памяти
+r = order("online"); nb = r.json()["number"]
+s1, s2 = SessionLocal(), SessionLocal()
+ob1 = s1.query(Order).filter_by(number=nb).one()
+ob2 = s2.query(Order).filter_by(number=nb).one()
+order_status.move(s2, ob2, "CANCELED"); s2.commit(); s2.close()
+ok_move = order_status.move(s1, ob1, "CONFIRMED")
+check("B", "Неудачная запись: объект в памяти показывает то, что в базе",
+      ok_move is False and ob1.status == "CANCELED", f"в памяти {ob1.status}")
+s1.rollback(); s1.close()
+
+# окно гонки п.4: окно оплаты открылось между чтением и отменой
+r = order("online"); nw = r.json()["number"]
+ow = fresh(nw); ow.created_at = utcnow() - timedelta(minutes=31); db.commit()
+reader = SessionLocal()
+seen = reader.query(Order).filter_by(number=nw).one()        # автоотмена прочитала
+pre_checkout(nw, 77000 * 100, qid="q-window")                # и тут открылось окно
+moved = order_status.move(reader, seen, "CANCELED", unpaid_only=True, where=[
+    payments.or_(Order.checkout_at.is_(None),
+                 Order.checkout_at <= utcnow() - payments.CHECKOUT_GRACE)])
+reader.commit(); reader.close()
+check("R4", "Окно оплаты открылось между чтением и отменой — заказ не отменён",
+      moved is False and fresh(nw).status == "NEW")
+
+# C. ошибка, которую повтор не лечит, — «ок», а не бесконечные повторы
+resp = hook({"update_id": 77, "message": {"chat": {"id": 900}, "from": {"id": 900},
+             "successful_payment": "не объект"}})
+check("C", "Кривое уведомление об оплате — 200, без бесконечных повторов",
+      resp.status_code == 200)
 
 failed = [r for r in results if not r[2]]
 print(f"\nИтого проверок: {len(results)}, не прошло: {len(failed)}")

@@ -30,7 +30,7 @@ import threading
 import time
 from datetime import timedelta
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from app import notify, order_status
 from app.models import Order, utcnow
@@ -282,8 +282,11 @@ def cancel_stale(db) -> list[str]:
     for order in stale:
         if order.checkout_at and order.checkout_at > now - CHECKOUT_GRACE:
             continue
-        # условно: оплата могла прийти между чтением и записью — тогда не трогаем
-        if order_status.move(db, order, "CANCELED", unpaid_only=True):
+        # Условно: между чтением и записью могла прийти оплата или открыться
+        # окно оплаты — и то и другое проверяем в самой записи, а не по чтению
+        if order_status.move(db, order, "CANCELED", unpaid_only=True, where=[
+                or_(Order.checkout_at.is_(None),
+                    Order.checkout_at <= now - CHECKOUT_GRACE)]):
             canceled.append(order.number)
             _invoices.pop(order.number, None)
     db.commit()

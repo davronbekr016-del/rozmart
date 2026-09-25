@@ -116,7 +116,7 @@ def target_status(order: Order, regos_status: dict) -> str | None:
         return None
     if new == "CANCELED":
         return new                  # отмена приходит из любого состояния
-    if order.payment_method == "online" and order.paid_at is None:
+    if order.status == "NEW" and order.payment_method == "online" and order.paid_at is None:
         # Неоплаченный заказ картой в REGOS попасть не должен вовсе. Если всё же
         # попал, «Принят» от кассы не превращает его в оплаченный: подтверждает
         # такой заказ только уведомление об оплате
