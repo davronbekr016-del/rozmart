@@ -75,7 +75,9 @@ def build_payload(order: Order, item_ids: dict[int, str],
         "external_code": order.number,
         "from_id": config.ORDER_FROM_ID,
         "stock_id": config.STOCK_ID,
-        "price_type_id": config.PRICE_TYPE_ID,
+        # вид цены, по которому считался заказ: администратор мог с тех пор
+        # переключить витрину на другой, а документ должен совпасть с заказом
+        "price_type_id": order.price_type_id or config.PRICE_TYPE_ID,
         "date": unix(order.created_at),
         "address": order.address,
         "phone": order.phone,

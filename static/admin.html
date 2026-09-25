@@ -137,6 +137,18 @@ button.act.blue:hover{background:#1A56DB}
           в рабочую группу.</p>
         <div id="chats" style="margin-bottom:26px"></div>
 
+        <h3 style="margin:0 0 4px;font-size:15px">Цены на витрине</h3>
+        <p class="meta" style="margin:0 0 12px">По какому виду цены REGOS продаёт витрина.
+          Остатки и касса, куда уходят заказы, от этого не меняются — это склад
+          магазина. Своя цена товара, заданная в его карточке, остаётся в силе
+          при любом виде цены.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+          <select id="priceType" style="max-width:320px"></select>
+          <button class="act blue" id="priceCheck">Посмотреть, что изменится</button>
+          <button class="act" id="priceApply" disabled>Применить</button>
+        </div>
+        <div class="meta" id="priceNote" style="margin-bottom:26px"></div>
+
         <h3 style="margin:0 0 4px;font-size:15px">Какие группы REGOS попадают в витрину</h3>
         <p class="meta" style="margin:0 0 12px">Ничего не отмечено — приезжает весь каталог сети.
           Рядом с группой указано, сколько её позиций уже заведено.</p>

@@ -33,7 +33,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Category, Product, Setting, Variant
-from app.regos import config
+from app.regos import config, prices
 from app.regos.client import RegosClient
 
 log = logging.getLogger(__name__)
@@ -140,15 +140,18 @@ def save_groups(db: Session, group_ids: list[int]) -> None:
     db.commit()
 
 
-def fetch_items(client: RegosClient, groups: list[int] | None = None) -> list[dict]:
+def fetch_items(client: RegosClient, groups: list[int] | None = None,
+                price_type_id: int | None = None) -> list[dict]:
     """Каталог магазина с ценами и остатками.
 
     stock_id и price_type_id передаются всегда: без price_type_id REGOS молча
-    подставит первый тип цены по id, то есть цены чужой точки.
+    подставит первый тип цены по id, то есть цены чужой точки. Вид цены —
+    тот, что выбран в панели (app/regos/prices.py), по умолчанию из окружения.
     """
     filters = [
         {"Field": "stock_id", "Operator": "Equal", "Value": str(config.STOCK_ID)},
-        {"Field": "price_type_id", "Operator": "Equal", "Value": str(config.PRICE_TYPE_ID)},
+        {"Field": "price_type_id", "Operator": "Equal",
+         "Value": str(price_type_id or config.PRICE_TYPE_ID)},
     ]
     if groups:
         filters.append({
@@ -200,7 +203,9 @@ def sync_catalog(
 
     groups = selected_groups(db)
     log.info("группы номенклатуры: %s", groups or "все")
-    items = fetch_items(client, groups)
+    price_type_id = prices.current(db)
+    log.info("вид цены: %s", price_type_id)
+    items = fetch_items(client, groups, price_type_id)
     log.info("REGOS отдал позиций: %s", len(items))
 
     # Полный перечень кодов нужен, чтобы отличить «позиция удалена из REGOS»
@@ -226,13 +231,13 @@ def sync_catalog(
             report.created += 1
             continue
 
-        if variant.price != price:
-            report.price_changes.append((item["name"], variant.price, price))
-        variant.price = price
+        if variant.regos_price != price:
+            report.price_changes.append((item["name"], variant.regos_price, price))
+        # Пишется только цена REGOS. Своя цена администратора остаётся
+        # в силе — синхронизация её не видит и не трогает. Фасовку без
+        # итоговой цены снимаем с публикации, но не удаляем (BR-09)
+        prices.apply_regos_price(variant, price)
         variant.regos_group_id = (item.get("group") or {}).get("id")
-        # Фасовка без цены покупателю бесполезна: снимаем с публикации,
-        # но не удаляем — на неё могут ссылаться оформленные заказы (BR-09).
-        variant.is_active = price is not None
         if barcode := barcodes.get(code):
             variant.barcode = barcode
         report.updated += 1
@@ -279,6 +284,7 @@ def _create_variant(db: Session, item: dict, price: int | None, barcode: str | N
         weight_grams=_weight_to_grams(weight),
         regos_group_id=(item.get("group") or {}).get("id"),
         price=price,
+        regos_price=price,
         barcode=barcode,
         is_active=False,
     )

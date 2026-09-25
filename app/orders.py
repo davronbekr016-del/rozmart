@@ -10,6 +10,7 @@ from app import notify, order_status, payments, photos
 from app.db import get_db
 from app.models import Counter, Order, OrderItem, Variant
 from app.profile import save_customer
+from app.regos import prices
 from app.schemas import OrderIn, OrderItemOut, OrderOut
 from app.telegram import TelegramUser, buyer, current_user, require_user
 
@@ -183,6 +184,7 @@ def create_order(
         delivery_slot=data.delivery_slot,
         comment=data.comment,
         payment_method=data.payment_method,
+        price_type_id=prices.current(db),
         goods_total=0,
         delivery_price=DELIVERY_PRICE,
         total=0,

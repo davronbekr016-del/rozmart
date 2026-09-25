@@ -69,6 +69,13 @@ class Variant(Base):
     # цены до получения прайс-листа. Дефолта 0 нет намеренно: ноль исказил бы
     # «цену от» в каталоге (BR-37). Фасовка без цены не публикуется.
     price: Mapped[int | None]
+    # price — цена, по которой продаёт витрина. Её собирают из двух:
+    # regos_price — как пришла из REGOS по выбранному виду цены;
+    # manual_price — своя цена, заданная администратором. Если она есть,
+    # действует она. Синхронизация обновляет только regos_price: ручная правка
+    # иначе слетала бы через полчаса, при следующем проходе. См. app/regos/prices.py
+    regos_price: Mapped[int | None]
+    manual_price: Mapped[int | None]
     barcode: Mapped[str | None] = mapped_column(String(50))
     is_active: Mapped[bool] = mapped_column(default=False, server_default=false())
 
@@ -195,6 +202,11 @@ class Order(Base):
     delivery_slot: Mapped[str] = mapped_column(String(60))
     comment: Mapped[str | None] = mapped_column(Text)
     payment_method: Mapped[str] = mapped_column(String(20))
+
+    # вид цены REGOS, по которому считался заказ. Уходит в документ REGOS:
+    # администратор может переключить вид цены, а заказ должен остаться тем,
+    # что видел покупатель
+    price_type_id: Mapped[int | None]
 
     # BR-10: суммы целыми числами в сумах, зафиксированы на момент оформления
     goods_total: Mapped[int]

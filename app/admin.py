@@ -128,7 +128,9 @@ class VariantRow(BaseModel):
     id: int
     external_code: str        # код REGOS, служебный — виден только администратору
     weight: str
-    price: int | None
+    price: int | None             # цена на витрине
+    regos_price: int | None = None    # цена из REGOS по выбранному виду цены
+    manual_price: int | None = None   # своя цена, если задана
     barcode: str | None
     is_active: bool
 
@@ -298,7 +300,8 @@ def get_product(
         variants=[
             VariantRow(
                 id=v.id, external_code=v.external_code, weight=v.weight,
-                price=v.price, barcode=v.barcode, is_active=v.is_active,
+                price=v.price, regos_price=v.regos_price, manual_price=v.manual_price,
+                barcode=v.barcode, is_active=v.is_active,
             )
             for v in sorted(product.variants, key=lambda v: v.weight_grams)
         ],
@@ -786,6 +789,87 @@ def pull_regos_photos(
         raise HTTPException(status_code=400, detail="Не задан ключ REGOS")
     try:
         return run(db, apply=apply)
+    except (RegosError, RuntimeError, OSError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+# ------------------------------------------------------------------ цены
+
+
+class PricePatch(BaseModel):
+    # None — вернуть цену REGOS. Границы — защита от опечатки лишним нулём
+    price: int | None = Field(default=None, ge=1, le=10_000_000)
+
+
+@router.patch("/variants/{variant_id}/price", response_model=ProductDetail)
+def set_variant_price(
+    variant_id: int,
+    data: PricePatch,
+    db: Session = Depends(get_db),
+    _: TelegramUser = Depends(require_admin),
+):
+    """Своя цена фасовки на витрине.
+
+    Синхронизация с REGOS её не трогает: обновляет только цену REGOS рядом.
+    Уже оформленные заказы не меняются — цена в них зафиксирована (BR-09).
+    """
+    from app.regos import prices
+
+    variant = db.get(Variant, variant_id)
+    if variant is None:
+        raise HTTPException(status_code=404, detail="Фасовка не найдена")
+    prices.set_manual(variant, data.price)
+    db.commit()
+    log.info("Фасовка %s: своя цена %s (REGOS %s)",
+             variant.external_code, data.price, variant.regos_price)
+    return get_product(variant.product_id, db)
+
+
+class PriceTypeIn(BaseModel):
+    price_type_id: int = Field(ge=1)
+
+
+@router.get("/regos/price-types")
+def price_types(db: Session = Depends(get_db), _: TelegramUser = Depends(require_admin)):
+    """Виды цен REGOS и какой из них сейчас на витрине."""
+    from app.regos import config, prices
+    from app.regos.client import RegosClient, RegosError
+
+    if not config.is_configured():
+        raise HTTPException(status_code=400, detail="Не задан ключ REGOS")
+    try:
+        types = prices.fetch_types(RegosClient())
+    except (RegosError, RuntimeError, OSError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return {"current": prices.current(db), "types": types, "stock_id": config.STOCK_ID}
+
+
+@router.post("/regos/price-type")
+def change_price_type(
+    data: PriceTypeIn,
+    apply: bool = Query(False, description="false — только показать, что изменится"),
+    db: Session = Depends(get_db),
+    _: TelegramUser = Depends(require_admin),
+):
+    """Переключить витрину на другой вид цены REGOS.
+
+    Сначала — предпросмотр (apply=false): сколько товаров подорожает,
+    подешевеет и сколько пропадёт с витрины, потому что в этом виде цены
+    для них нет. Применение — apply=true.
+    """
+    from app.regos import config, prices
+    from app.regos.client import RegosClient, RegosError
+
+    if not config.is_configured():
+        raise HTTPException(status_code=400, detail="Не задан ключ REGOS")
+    client = RegosClient()
+    try:
+        known = {t["id"] for t in prices.fetch_types(client)}
+        if data.price_type_id not in known:
+            raise HTTPException(status_code=400, detail="Такого вида цены в REGOS нет")
+        if apply:
+            return {"applied": True, **prices.switch(db, client, data.price_type_id)}
+        return {"applied": False, **prices.compare(db, client, data.price_type_id)}
     except (RegosError, RuntimeError, OSError) as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 

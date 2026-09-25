@@ -51,6 +51,19 @@ COLUMNS = [
     ("orders", "provider_charge_id", "VARCHAR(128)"),
     ("orders", "paid_amount", "INTEGER"),
     ("orders", "checkout_at", "TIMESTAMP"),
+    # цена из REGOS и своя цена витрины — отдельно; вид цены у заказа
+    ("variants", "regos_price", "INTEGER"),
+    ("variants", "manual_price", "INTEGER"),
+    ("orders", "price_type_id", "INTEGER"),
+]
+
+# Разовые правки данных после добавления колонок. Каждая безопасна при повторе.
+DATA_FIXES = [
+    # до разделения цен в price лежала цена REGOS — переносим её туда, где ей
+    # теперь место. Строки со своей ценой не трогаем: там price — ручная
+    ("перенос цен REGOS",
+     "UPDATE variants SET regos_price = price "
+     "WHERE regos_price IS NULL AND manual_price IS NULL AND price IS NOT NULL"),
 ]
 
 INDEXES = [
@@ -102,3 +115,8 @@ def apply() -> None:
                 continue
             log.info("Создаю уникальный индекс %s", name)
             conn.execute(text(f"CREATE UNIQUE INDEX {name} ON {table} ({column})"))
+
+        for label, sql in DATA_FIXES:
+            changed = conn.execute(text(sql)).rowcount
+            if changed:
+                log.info("%s: %s строк", label, changed)

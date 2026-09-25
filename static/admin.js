@@ -138,6 +138,58 @@
       .catch(function (e) { say(e.message); });
   }
 
+  // Фасовка с ценой. Своя цена действует вместо цены REGOS, и синхронизация
+  // её не трогает — поэтому рядом всегда видно, сколько стоит в REGOS:
+  // иначе забытая своя цена разойдётся с кассой, и никто не заметит
+  function variantRow(productId, v) {
+    var row = el('div');
+    row.style.cssText = 'padding:9px 0;border-bottom:1px solid #F0F0F0';
+
+    var top = el('div');
+    top.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap';
+    top.appendChild(el('span', null, v.weight));
+    var input = document.createElement('input');
+    input.type = 'number'; input.min = '1'; input.step = '1';
+    input.style.cssText = 'max-width:130px';
+    input.value = v.price != null ? v.price : '';
+    input.placeholder = v.regos_price != null ? String(v.regos_price) : 'цена';
+    top.appendChild(input);
+    top.appendChild(el('span', 'meta', 'сум'));
+
+    var save = el('button', 'act ghost', 'Сохранить цену');
+    save.onclick = function () {
+      var value = input.value.trim();
+      if (!value) return say('Укажите цену или верните цену REGOS');
+      setPrice(v.id, Number(value));
+    };
+    top.appendChild(save);
+    if (v.manual_price != null) {
+      var reset = el('button', 'act ghost', 'Вернуть цену REGOS');
+      reset.onclick = function () { setPrice(v.id, null); };
+      top.appendChild(reset);
+    }
+    row.appendChild(top);
+
+    var source = v.manual_price != null
+      ? 'своя цена · в REGOS ' + (v.regos_price != null ? money(v.regos_price) : 'цены нет')
+      : (v.regos_price != null ? 'цена REGOS' : 'в REGOS цены нет — фасовка не продаётся');
+    row.appendChild(el('div', 'meta', source + ' · код ' + v.external_code +
+      (v.barcode ? ' · ш/к ' + v.barcode : '') + (v.is_active ? '' : ' · скрыта')));
+    return row;
+  }
+
+  function setPrice(variantId, price) {
+    api('/variants/' + variantId + '/price', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ price: price })
+    }).then(function (p) {
+      say(price == null ? 'Вернули цену REGOS' : 'Цена сохранена', 'ok');
+      loadProducts();
+      return api('/categories').then(function (cats) { renderProduct(p, cats); });
+    }).catch(function (e) { say(e.message); });
+  }
+
   function renderProduct(p, categories) {
     document.getElementById('paneTtl').textContent = 'Карточка товара';
     var body = document.getElementById('paneBody');
@@ -225,12 +277,7 @@
     // Фасовки. Показываем код REGOS — администратору он нужен, чтобы сверяться
     // с учётной системой. Покупателю этот код не показывается нигде (BR-36).
     var vbox = el('div');
-    p.variants.forEach(function (v) {
-      var line = el('div', 'meta');
-      line.textContent = v.weight + ' · ' + money(v.price) + ' · код ' + v.external_code +
-        (v.barcode ? ' · ш/к ' + v.barcode : '') + (v.is_active ? '' : ' · скрыта');
-      vbox.appendChild(line);
-    });
+    p.variants.forEach(function (v) { vbox.appendChild(variantRow(p.id, v)); });
     field('Фасовки из REGOS (' + p.variants.length + ')', vbox);
 
     var moveTo = document.createElement('input');
@@ -502,6 +549,7 @@
     api('/regos/groups').then(renderGroups).catch(function (e) { say(e.message); });
     api('/regos/auto').then(renderAuto).catch(function (e) { say(e.message); });
     loadChats();
+    loadPriceTypes();
   }
 
   function renderAuto(data) {
@@ -623,6 +671,64 @@
       .finally(function () { buttons.forEach(function (b) { b.disabled = false; }); });
   }
 
+  // --------------------------------------------------- вид цены REGOS
+
+  var priceState = { current: null, checked: null };
+
+  function loadPriceTypes() {
+    api('/regos/price-types').then(function (r) {
+      priceState.current = r.current;
+      var sel = document.getElementById('priceType');
+      sel.innerHTML = '';
+      r.types.forEach(function (t) {
+        var o = document.createElement('option');
+        o.value = t.id;
+        o.textContent = t.name + (t.id === r.current ? ' — сейчас на витрине' : '');
+        if (t.id === r.current) o.selected = true;
+        sel.appendChild(o);
+      });
+      document.getElementById('priceNote').textContent = '';
+      document.getElementById('priceApply').disabled = true;
+    }).catch(function (e) {
+      document.getElementById('priceNote').textContent = 'Виды цен не загрузились: ' + e.message;
+    });
+  }
+
+  // Применять можно только то, что сначала посмотрели: в другом виде цены
+  // части товаров цены может не быть, и они молча пропали бы с витрины
+  function priceChange(apply) {
+    var id = Number(document.getElementById('priceType').value);
+    var note = document.getElementById('priceNote');
+    var applyBtn = document.getElementById('priceApply');
+    if (apply && priceState.checked !== id) return say('Сначала посмотрите, что изменится');
+    note.textContent = apply ? 'Применяем…' : 'Считаем…';
+    applyBtn.disabled = true;
+    api('/regos/price-type?apply=' + (apply ? 'true' : 'false'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ price_type_id: id })
+    }).then(function (r) {
+      var st = r.stats;
+      var text = 'Товаров на витрине: ' + st.total + '. Дороже: ' + st.up +
+        ', дешевле: ' + st.down + ', без изменений: ' + st.same +
+        (st.manual ? ', со своей ценой (не меняются): ' + st.manual : '') +
+        (st.lost ? '. ПРОПАДУТ с витрины — нет цены в этом виде: ' + st.lost : '') + '.';
+      var lost = r.rows.filter(function (x) { return x.change === 'пропадёт с витрины'; })
+        .slice(0, 5).map(function (x) { return x.product + ' ' + x.weight; });
+      if (lost.length) text += ' Например: ' + lost.join(', ') + '.';
+      if (r.applied) {
+        note.textContent = 'Применено. ' + text;
+        say('Вид цены переключён', 'ok');
+        priceState.checked = null;
+        loadPriceTypes(); loadProducts();
+      } else {
+        note.textContent = text;
+        priceState.checked = id;
+        applyBtn.disabled = id === priceState.current;
+      }
+    }).catch(function (e) { note.textContent = ''; say(e.message); });
+  }
+
   function loadChats() {
     api('/notify/chats').then(renderChats).catch(function (e) { say(e.message); });
   }
@@ -721,6 +827,14 @@
 
   // Удаление необратимо, поэтому сначала показываем, сколько именно уедет,
   // и только вторым нажатием выполняем.
+  document.getElementById('priceCheck').onclick = function () { priceChange(false); };
+  document.getElementById('priceApply').onclick = function () { priceChange(true); };
+  document.getElementById('priceType').onchange = function () {
+    // выбрали другой вид — прежний предпросмотр к нему не относится
+    priceState.checked = null;
+    document.getElementById('priceApply').disabled = true;
+    document.getElementById('priceNote').textContent = '';
+  };
   document.getElementById('photoCheck').onclick = function () { pullPhotos(false); };
   document.getElementById('photoPull').onclick = function () { pullPhotos(true); };
 
