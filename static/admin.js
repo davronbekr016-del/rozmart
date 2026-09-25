@@ -422,7 +422,9 @@
 
       // Ручная отправка — на случай, когда автоматическая исчерпала попытки
       // или оператор устранил причину отказа
-      if (!o.regos_document_id) {
+      // неоплаченный заказ картой уйдёт в REGOS сам, когда придёт оплата;
+      // кнопка здесь была лазейкой отдать его кассиру без денег
+      if (!o.regos_document_id && !o.awaiting_payment && o.status !== 'CANCELED') {
         var push = el('button', 'act ghost', 'Отправить в REGOS');
         push.onclick = function () {
           push.disabled = true;
@@ -447,6 +449,11 @@
         var b = el('button', 'act ' + (code === 'CANCELED' ? 'ghost' : ''),
                    state.statuses[code]);
         b.onclick = function () {
+          if (code === 'CANCELED' && o.checkout_open && !confirm(
+              'Покупатель прямо сейчас в окне оплаты. Если деньги успеют списаться, '
+              + 'заказ останется отменённым и понадобится возврат. Всё равно отменить?')) {
+            return;
+          }
           api('/orders/' + o.id + '/status', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },

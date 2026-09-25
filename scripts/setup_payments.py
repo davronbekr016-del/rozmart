@@ -69,6 +69,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Настройка оплаты картой")
     parser.add_argument("--show", action="store_true")
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--drop-pending", action="store_true",
+                        help="выбросить недоставленные обновления — только при первой установке")
     args = parser.parse_args()
 
     if not BOT_TOKEN:
@@ -96,8 +98,11 @@ def main() -> int:
         "url": public + WEBHOOK_PATH,
         "secret_token": secret,
         "allowed_updates": UPDATES,
-        # накопившееся до настройки — старые сообщения покупателей, они не нужны
-        "drop_pending_updates": True,
+        # Очередь по умолчанию НЕ сбрасываем: при повторной настройке (смена
+        # адреса или секрета) в ней могут лежать недоставленные уведомления
+        # об оплате — выбросить их значит потерять оплаченные заказы.
+        # Сбросить можно только явно и только при первой установке
+        "drop_pending_updates": args.drop_pending,
         "max_connections": 20,
     })
     print(f"Вебхук магазинного бота: {public + WEBHOOK_PATH}")

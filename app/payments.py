@@ -32,7 +32,7 @@ from datetime import timedelta
 
 from sqlalchemy import select
 
-from app import notify
+from app import notify, order_status
 from app.models import Order, utcnow
 from app.telegram import BOT_TOKEN
 
@@ -40,6 +40,11 @@ log = logging.getLogger(__name__)
 
 # Токен провайдера из BotFather. В репозитории его нет — только на сервере.
 TOKEN = os.getenv("PAYMENT_PROVIDER_TOKEN", "").strip()
+
+# Секрет вебхука магазинного бота. Без него вебхук отвергает всё, и оплата
+# гарантированно не пройдёт: запрос перед списанием уйдёт в тайм-аут.
+# Поэтому без секрета оплата картой считается выключенной.
+SHOP_SECRET = os.getenv("SHOP_WEBHOOK_SECRET", "").strip()
 
 # Кто может платить картой, пока токен тестовый. Telegram-id через запятую.
 TEST_USERS = {
@@ -65,6 +70,7 @@ SWEEP_SECONDS = 60
 REFUSE = {
     "missing": "Заказ не найден. Оформите его заново.",
     "canceled": "Заказ отменён — оплатить его уже нельзя.",
+    "busy": "Заказ уже в работе у магазина — оплатить его здесь нельзя. Свяжитесь с магазином.",
     "paid": "Этот заказ уже оплачен.",
     "not_card": "Этот заказ оформлен с оплатой наличными.",
     "amount": "Сумма заказа изменилась. Откройте заказ в приложении и оплатите заново.",
@@ -76,7 +82,7 @@ class PaymentError(Exception):
 
 
 def enabled() -> bool:
-    return bool(TOKEN)
+    return bool(TOKEN and SHOP_SECRET)
 
 
 def is_test() -> bool:
@@ -96,6 +102,12 @@ def awaiting_payment(order: Order) -> bool:
     """Заказ ждёт оплаты картой: оформлен онлайн, денег ещё нет."""
     return order.payment_method == "online" and order.paid_at is None \
         and order.status == "NEW"
+
+
+def checkout_open(order: Order) -> bool:
+    """Покупатель сейчас в окне оплаты: Telegram недавно спрашивал «можно ли»."""
+    return (awaiting_payment(order) and order.checkout_at is not None
+            and order.checkout_at > utcnow() - CHECKOUT_GRACE)
 
 
 def pay_until(order: Order):
@@ -123,12 +135,30 @@ def prices(order: Order) -> list[dict]:
     return rows
 
 
+# Выставленные счета: номер заказа -> (сумма, ссылка, когда). Ссылка на счёт
+# живёт, пока по ней не заплатили, и выставлять новую на каждое нажатие
+# «Оплатить» незачем. А главное — нельзя: каждый createInvoiceLink идёт в лимит
+# запросов магазинного бота, и упёршийся в него бот перестанет отвечать
+# на запросы перед списанием у всех покупателей сразу.
+_invoices: dict[str, tuple[int, str, float]] = {}
+INVOICE_TTL = 30 * 60
+
+
 def create_invoice_link(order: Order) -> str:
     """Ссылка на счёт для Telegram.WebApp.openInvoice.
 
     Выставляет магазинный бот — тот, из которого открыто приложение:
     платёж Telegram привязывает к боту, чей счёт.
     """
+    cached = _invoices.get(order.number)
+    if cached and cached[0] == order.total and time.time() - cached[2] < INVOICE_TTL:
+        return cached[1]
+    link = _create_invoice_link(order)
+    _invoices[order.number] = (order.total, link, time.time())
+    return link
+
+
+def _create_invoice_link(order: Order) -> str:
     names = ", ".join(i.product_name for i in order.items[:3])
     if len(order.items) > 3:
         names += f" и ещё {len(order.items) - 3}"
@@ -164,8 +194,10 @@ def check_pre_checkout(db, query: dict) -> tuple[bool, str | None]:
         return False, REFUSE["not_card"]
     if order.paid_at is not None:
         return False, REFUSE["paid"]
-    if order.status != "NEW":
+    if order.status == "CANCELED":
         return False, REFUSE["canceled"]
+    if order.status != "NEW":
+        return False, REFUSE["busy"]
     if query.get("currency") != CURRENCY or query.get("total_amount") != order.total * MINOR:
         log.warning("Заказ %s: сумма в окне оплаты %s %s, в заказе %s",
                     order.number, query.get("total_amount"), query.get("currency"),
@@ -175,13 +207,6 @@ def check_pre_checkout(db, query: dict) -> tuple[bool, str | None]:
     order.checkout_at = utcnow()
     db.commit()
     return True, None
-
-
-def answer_pre_checkout(query_id: str, ok: bool, error: str | None) -> None:
-    payload = {"pre_checkout_query_id": query_id, "ok": ok}
-    if not ok:
-        payload["error_message"] = error
-    notify.call("answerPreCheckoutQuery", payload, token=BOT_TOKEN)
 
 
 def record_payment(db, payment: dict) -> tuple[str, Order | None]:
@@ -194,13 +219,24 @@ def record_payment(db, payment: dict) -> tuple[str, Order | None]:
     'unknown'   — заказа с таким номером нет, а деньги списаны.
     """
     charge = payment.get("telegram_payment_charge_id")
-    if charge and db.scalar(select(Order).where(Order.payment_charge_id == charge)):
-        return "duplicate", None
+    if charge:
+        already = db.scalar(select(Order).where(Order.payment_charge_id == charge))
+        if already is not None:
+            return "duplicate", already
 
     order = find(db, payment.get("invoice_payload") or "")
     if order is None:
         log.error("Оплата %s по неизвестному заказу %s", charge, payment.get("invoice_payload"))
         return "unknown", None
+
+    if (payment.get("currency") != CURRENCY
+            or payment.get("total_amount") != order.total * MINOR):
+        # Сумму сверяли перед списанием, и счёт выставляем сами — расхождения
+        # быть не должно. Но если оно есть, заказ по такому платежу не принимаем:
+        # пусть разберётся человек
+        log.error("Заказ %s: оплачено %s %s, а заказ на %s", order.number,
+                  payment.get("total_amount"), payment.get("currency"), order.total * MINOR)
+        return "late", order
 
     if order.paid_at is not None or order.status != "NEW":
         # Второй платёж по оплаченному или оплата отменённого: деньги списаны,
@@ -209,12 +245,22 @@ def record_payment(db, payment: dict) -> tuple[str, Order | None]:
                   order.number, charge, order.status, order.paid_at)
         return "late", order
 
-    order.paid_at = utcnow()
-    order.payment_charge_id = charge
-    order.provider_charge_id = payment.get("provider_payment_charge_id")
-    order.paid_amount = (payment.get("total_amount") or 0) // MINOR
-    order.status = "CONFIRMED"
+    # Условная запись: заказ всё ещё NEW и не оплачен. Если в эту же долю
+    # секунды его отменила автоотмена или провёл второй платёж, запись
+    # не пройдёт, и деньги уйдут по ветке «нужен человек», а не пропадут
+    moved = order_status.move(db, order, "CONFIRMED", unpaid_only=True, values={
+        "paid_at": utcnow(),
+        "payment_charge_id": charge,
+        "provider_charge_id": payment.get("provider_payment_charge_id"),
+        "paid_amount": payment["total_amount"] // MINOR,
+    })
     db.commit()
+    db.refresh(order)
+    if not moved:
+        log.error("Заказ %s изменился в момент оплаты %s: сейчас %s",
+                  order.number, charge, order.status)
+        return "late", order
+    _invoices.pop(order.number, None)
     log.info("Заказ %s оплачен картой, платёж %s", order.number, charge)
     return "confirmed", order
 
@@ -236,10 +282,12 @@ def cancel_stale(db) -> list[str]:
     for order in stale:
         if order.checkout_at and order.checkout_at > now - CHECKOUT_GRACE:
             continue
-        order.status = "CANCELED"
-        canceled.append(order.number)
+        # условно: оплата могла прийти между чтением и записью — тогда не трогаем
+        if order_status.move(db, order, "CANCELED", unpaid_only=True):
+            canceled.append(order.number)
+            _invoices.pop(order.number, None)
+    db.commit()
     if canceled:
-        db.commit()
         log.info("Отменены неоплаченные заказы: %s", ", ".join(canceled))
     return canceled
 

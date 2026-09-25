@@ -88,7 +88,7 @@ results = []
 
 def check(n, name, ok, detail=""):
     results.append((n, name, ok))
-    print(f"{'ПРОШЛО ' if ok else 'НЕ ПРОШЛО'} {n:>2}. {name}{(' — ' + detail) if detail else ''}")
+    print(f"{'ПРОШЛО ' if ok else 'НЕ ПРОШЛО'} {str(n):>3}. {name}{(' — ' + detail) if detail else ''}")
 
 
 def order(payment, who=BUYER, key=None):
@@ -107,11 +107,12 @@ def hook(update, secret="shop-secret"):
 
 
 def pre_checkout(number, amount, qid="q1"):
-    calls.clear()
-    hook({"update_id": 1, "pre_checkout_query": {
+    # ответ Telegram получает прямо в теле ответа на вебхук
+    answer = hook({"update_id": 1, "pre_checkout_query": {
         "id": qid, "from": {"id": 900}, "currency": "UZS",
-        "total_amount": amount, "invoice_payload": number}})
-    answer = next(p for m, p, _ in calls if m == "answerPreCheckoutQuery")
+        "total_amount": amount, "invoice_payload": number}}).json()
+    assert answer.get("method") == "answerPreCheckoutQuery", answer
+    assert answer.get("pre_checkout_query_id") == qid, answer
     return answer
 
 
@@ -260,6 +261,82 @@ inv9 = client.post(f"/api/orders/{o9['number']}/invoice", headers=BUYER)
 check(9, "Заказ за наличные — «Принят» сразу, сотрудникам сразу, счёта нет",
       o9["status"] == "CONFIRMED" and len(texts) == 1 and "💵 наличными курьеру" in texts[0]
       and inv9.status_code == 409)
+
+# ======================================================= находки независимого ревью
+from app import order_status  # noqa: E402
+from app.regos.orders_sync import target_status  # noqa: E402
+
+# 1. ручная выгрузка неоплаченного в REGOS и синхронизация с кассой
+r = order("online"); nr1 = r.json()["number"]
+o = fresh(nr1)
+r = client.post(f"/api/admin/orders/{o.id}/push", headers=ADMIN)
+check("R1", "Кнопка «Отправить в REGOS» не выгружает неоплаченный заказ картой",
+      r.status_code == 409 and fresh(nr1).regos_document_id is None, r.json().get("detail", ""))
+check("R1", "«Утверждён» с кассы не делает неоплаченный заказ «Принятым»",
+      target_status(fresh(nr1), {"id": 23, "name": "Утвержден"}) is None
+      and target_status(fresh(nr1), {"id": 27, "name": "Отменен"}) == "CANCELED")
+
+# 2. сбой при проведении платежа — 500, повтор проводит
+import app.payments as _pay  # noqa: E402
+real_record = _pay.record_payment
+def broken(*a, **kw):
+    raise RuntimeError("база недоступна")
+_pay.record_payment = broken
+r = order("online"); nr2 = r.json()["number"]
+resp = paid(nr2, 77000 * 100, charge="tg-retry")
+_pay.record_payment = real_record
+check("R2", "Сбой при проведении платежа — вебхук отвечает 500, Telegram повторит",
+      resp.status_code == 500 and fresh(nr2).paid_at is None)
+resp = paid(nr2, 77000 * 100, charge="tg-retry")
+check("R2", "Повтор уведомления проводит платёж",
+      resp.status_code == 200 and fresh(nr2).status == "CONFIRMED" and fresh(nr2).paid_at)
+
+# повтор долечивает сообщение сотрудникам, если в прошлый раз оно не встало
+db.query(Notification).filter_by(order_id=fresh(nr2).id).delete(); db.commit()
+paid(nr2, 77000 * 100, charge="tg-retry")
+check("R2", "Повтор ставит пропавшее сообщение сотрудникам — ровно одно",
+      len(staff_texts(nr2)) == 1)
+paid(nr2, 77000 * 100, charge="tg-retry")
+check("R2", "Следующий повтор второго сообщения не ставит", len(staff_texts(nr2)) == 1)
+
+# 4. гонки: запись по устаревшему чтению не проходит
+r = order("online"); nr4 = r.json()["number"]
+other = SessionLocal()
+stale = other.query(Order).filter_by(number=nr4).one()      # автоотмена прочитала NEW
+paid(nr4, 77000 * 100, charge="tg-race")                     # и тут пришла оплата
+moved = order_status.move(other, stale, "CANCELED", unpaid_only=True)
+other.commit(); other.close()
+check("R4", "Автоотмена по устаревшему чтению не пишет «Отменён» поверх оплаты",
+      moved is False and fresh(nr4).status == "CONFIRMED")
+paid(nr4, 77000 * 100, charge="tg-race-2")                   # второй платёж по тому же
+check("R4", "Второй платёж по оплаченному заказу — «нужен человек», первый не перетёрт",
+      fresh(nr4).payment_charge_id == "tg-race"
+      and any("уже оплачен" in t for t in staff_texts(nr4)))
+
+# 10. сумма в уведомлении об оплате не сходится
+r = order("online"); nr10 = r.json()["number"]
+paid(nr10, 1000 * 100, charge="tg-wrong-sum")
+check("R10", "Оплачено не столько, сколько стоит заказ — заказ не принят, сотрудникам сигнал",
+      fresh(nr10).status == "NEW" and fresh(nr10).paid_at is None
+      and any("Нужен возврат" in t for t in staff_texts(nr10)))
+
+# 12. удалить оплаченный заказ нельзя
+r = client.delete(f"/api/admin/orders/{fresh(num).id}", headers=ADMIN)
+check("R12", "Оплаченный заказ удалить нельзя", r.status_code == 409 and fresh(num) is not None)
+
+# 14. счёт не выставляется заново на каждое нажатие
+r = order("online"); nr14 = r.json()["number"]
+calls.clear()
+for _ in range(3):
+    client.post(f"/api/orders/{nr14}/invoice", headers=BUYER)
+made = sum(1 for m, _p, _t in calls if m == "createInvoiceLink")
+check("R14", "Три нажатия «Оплатить» — один запрос к Telegram", made == 1, f"запросов: {made}")
+
+# 11. текст отказа по заказу, который уже в работе
+o11 = fresh(nr2)                                             # оплачен и принят
+ans = pre_checkout(nr2, 77000 * 100, qid="q-busy")
+check("R11", "Отказ перед оплатой по оплаченному заказу — «уже оплачен», а не «отменён»",
+      ans["ok"] is False and "уже оплачен" in ans["error_message"])
 
 failed = [r for r in results if not r[2]]
 print(f"\nИтого проверок: {len(results)}, не прошло: {len(failed)}")

@@ -15,10 +15,13 @@ Telegram сообщает ему о платежах двумя обновлен
 Всё прочее, что пишут магазинному боту, пропускаем молча: до этого вебхука
 у него не было вовсе, и на сообщения он не отвечал — так и оставляем.
 """
+import hmac
 import logging
 import os
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, Request
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -33,19 +36,27 @@ SECRET = os.getenv("SHOP_WEBHOOK_SECRET", "").strip()
 WEBHOOK_PATH = "/tg/shop"
 
 
-def handle_pre_checkout(db: Session, query: dict) -> None:
-    """Отвечает, можно ли списывать. Молчать нельзя: без ответа за 10 секунд
-    Telegram отменит платёж, а покупатель увидит невнятную ошибку."""
+def handle_pre_checkout(db: Session, query: dict) -> dict:
+    """Отвечает, можно ли списывать.
+
+    Ответ уходит прямо в теле ответа на вебхук — Telegram умеет принимать так
+    вызов метода. Отдельный запрос к api.telegram.org занял бы лишнюю секунду
+    из десяти, отведённых на ответ, а медленный Telegram съел бы их все.
+
+    Молчать нельзя: без ответа за 10 секунд Telegram отменит платёж сам,
+    поэтому любой сбой проверки — это «нет» с понятным текстом, а не ошибка.
+    """
     try:
         ok, error = payments.check_pre_checkout(db, query)
     except Exception:                       # noqa: BLE001
         db.rollback()
         log.exception("Не проверили заказ перед оплатой")
         ok, error = False, "Не получилось проверить заказ. Попробуйте ещё раз через минуту."
-    try:
-        payments.answer_pre_checkout(query["id"], ok, error)
-    except notify.NotifyError as exc:
-        log.warning("Не ответили на запрос перед оплатой: %s", exc)
+    answer = {"method": "answerPreCheckoutQuery",
+              "pre_checkout_query_id": query.get("id"), "ok": ok}
+    if not ok:
+        answer["error_message"] = error
+    return answer
 
 
 def alert_staff(db: Session, background: BackgroundTasks, order, text: str) -> None:
@@ -66,8 +77,35 @@ def alert_staff(db: Session, background: BackgroundTasks, order, text: str) -> N
         background.add_task(notify.send_many, [row.id for row in rows])
 
 
+def send_onward(db: Session, background: BackgroundTasks, order, only_missing=False) -> None:
+    """Оплаченный заказ — дальше тем же путём, что наличный: сотрудникам
+    (теперь с пометкой «оплачено») и в REGOS.
+
+    only_missing — при повторе уведомления: сообщение ставим, только если его
+    ещё нет. Выгрузку запускаем в любом случае — push_one сам проверяет,
+    выгружен ли заказ.
+    """
+    from app.models import Notification
+    from app.regos.orders_push import push_one
+
+    sent = only_missing and db.query(Notification).filter(
+        Notification.order_id == order.id, Notification.kind == "staff").first()
+    if not sent:
+        rows = notify.queue_staff(db, order, notify.staff_new_order(order))
+        if rows:
+            db.commit()
+            background.add_task(notify.send_many, [row.id for row in rows])
+    background.add_task(push_one, order.id)
+
+
 def handle_payment(db: Session, background: BackgroundTasks, payment: dict) -> None:
-    """Проводит платёж и запускает заказ дальше тем же путём, что наличный."""
+    """Проводит платёж и запускает заказ дальше тем же путём, что наличный.
+
+    Исключения отсюда наружу выпускаем намеренно: вебхук ответит 500, и Telegram
+    пришлёт уведомление ещё раз. Проглотить ошибку — значит потерять платёж:
+    деньги списаны, а заказ через полчаса отменит автоотмена. Повтор безопасен —
+    второй раз платёж не проведёт уникальный payment_charge_id.
+    """
     try:
         outcome, order = payments.record_payment(db, payment)
     except IntegrityError:
@@ -80,17 +118,16 @@ def handle_payment(db: Session, background: BackgroundTasks, payment: dict) -> N
     charge = payment.get("telegram_payment_charge_id") or "—"
     amount = notify.money((payment.get("total_amount") or 0) // payments.MINOR)
 
-    if outcome == "duplicate":
-        return
     if outcome == "confirmed":
-        # сотрудникам — только теперь, с пометкой «оплачено»: до оплаты
-        # неоплаченный заказ им собирать было незачем
-        rows = notify.queue_staff(db, order, notify.staff_new_order(order))
-        if rows:
-            db.commit()
-            background.add_task(notify.send_many, [row.id for row in rows])
-        from app.regos.orders_push import push_one
-        background.add_task(push_one, order.id)
+        send_onward(db, background, order)
+        return
+    if outcome == "duplicate":
+        # Повтор уведомления. Обычно делать нечего, но повтор бывает и потому,
+        # что в прошлый раз мы ответили 500: платёж тогда уже записался, а
+        # сообщение сотрудникам или выгрузка не успели. Долечиваем — оба шага
+        # безопасно повторять
+        if order is not None and order.status == "CONFIRMED" and order.paid_at:
+            send_onward(db, background, order, only_missing=True)
         return
     if outcome == "late":
         state = "уже оплачен" if order.paid_at else "отменён"
@@ -108,6 +145,17 @@ def handle_payment(db: Session, background: BackgroundTasks, payment: dict) -> N
     ))
 
 
+def process(db: Session, background: BackgroundTasks, update: dict) -> dict:
+    """Разбор обновления. Синхронный: внутри запросы к базе, и держать ими
+    цикл событий, из которого отвечают покупателям, нельзя."""
+    if "pre_checkout_query" in update:
+        return handle_pre_checkout(db, update["pre_checkout_query"])
+    payment = (update.get("message") or {}).get("successful_payment")
+    if payment:
+        handle_payment(db, background, payment)
+    return {"ok": True}
+
+
 @router.post(WEBHOOK_PATH, include_in_schema=False)
 async def shop_webhook(
     request: Request,
@@ -115,12 +163,10 @@ async def shop_webhook(
     secret: str | None = Header(default=None, alias="X-Telegram-Bot-Api-Secret-Token"),
     db: Session = Depends(get_db),
 ):
-    """Обновления магазинного бота.
-
-    «ок» отвечаем всегда: на любой другой ответ Telegram повторяет обновление,
-    а повтор уведомления об оплате мы и так переживаем — но зачем его провоцировать.
-    """
-    if not SECRET or secret != SECRET:
+    """Обновления магазинного бота."""
+    # сравнение постоянного времени: обычное «!=» по времени ответа выдаёт,
+    # сколько первых символов секрета угадано
+    if not SECRET or not hmac.compare_digest((secret or "").encode(), SECRET.encode()):
         log.warning("Обновление магазинного бота с неверным секретом отклонено")
         return {"ok": False}
     try:
@@ -129,13 +175,10 @@ async def shop_webhook(
         return {"ok": True}
 
     try:
-        if "pre_checkout_query" in update:
-            handle_pre_checkout(db, update["pre_checkout_query"])
-        else:
-            payment = (update.get("message") or {}).get("successful_payment")
-            if payment:
-                handle_payment(db, background, payment)
+        return await run_in_threadpool(process, db, background, update)
     except Exception:                       # noqa: BLE001
         db.rollback()
-        log.exception("Не разобрали обновление магазинного бота")
-    return {"ok": True}
+        log.exception("Не разобрали обновление магазинного бота — Telegram повторит")
+        # 500 — просьба повторить. Для уведомления об оплате это единственный
+        # способ его не потерять
+        return JSONResponse({"ok": False}, status_code=500)

@@ -577,8 +577,9 @@ async function submitOrder() {
     show("done");
     if (state.profile) loadProfile();   // сервер запомнил данные — подтянем их обратно
     // заказ с оплатой картой создан и ждёт оплаты — сразу открываем окно;
-    // закроет без оплаты — на экране останется кнопка «Оплатить»
-    if (body.payment_method === "online") payOrder(body.number);
+    // закроет без оплаты — на экране останется кнопка «Оплатить».
+    // Повтор с тем же ключом мог вернуть уже оплаченный заказ — тогда окна нет
+    if (awaitingPayment(body)) payOrder(body.number);
   } catch (error) {
     console.error(error);
     // обрыв связи даёт техническое «Failed to fetch» — покупателю такое не показываем
@@ -611,6 +612,10 @@ function renderDone(order, mode) {
     checking: ["ti-loader-2", "Проверяем оплату…", "Это займёт несколько секунд."],
     slow: ["ti-clock", "Оплата проверяется",
       "Как только банк подтвердит платёж, статус обновится в «Моих заказах»."],
+    expired: ["ti-x", "Заказ отменён",
+      "Время на оплату вышло. Оформите заказ заново."],
+    late: ["ti-alert-triangle", "Заказ отменён, а оплата прошла",
+      "Магазин свяжется с вами, чтобы вернуть деньги или восстановить заказ."],
   }[mode];
   const spin = mode === "checking" ? "animation:spin 1s linear infinite;" : "";
   const sumLabel = mode === "paid" ? "Оплачено" : (card ? "К оплате" : "Оплата курьеру");
@@ -1483,10 +1488,10 @@ async function payOrder(number) {
   try {
     const { link } = await api(`/api/orders/${encodeURIComponent(number)}/invoice`,
       { method: "POST" });
-    tg.openInvoice(link, (status) => {
-      state.paying = false;
-      afterInvoice(number, status);
-    });
+    tg.openInvoice(link, (status) => afterInvoice(number, status));
+    // окно Telegram модальное: второе поверх не откроется, и держать флаг
+    // дольше незачем. А если колбэк не придёт вовсе, кнопка не должна умереть
+    state.paying = false;
   } catch (error) {
     state.paying = false;
     console.error(error);
@@ -1500,13 +1505,34 @@ async function afterInvoice(number, status) {
     renderDone(orderStub(number), "checking");
     show("done");
     const order = await waitForPayment(number);
-    return renderDone(order || orderStub(number), order && order.paid ? "paid" : "slow");
+    return renderDone(order || orderStub(number), stateAfterPayment(order));
   }
-  // закрыли окно или платёж не прошёл: заказ жив и ждёт оплаты
+  // Закрыли окно или платёж не прошёл. Что показать — решают данные сервера:
+  // за время в окне оплаты заказ мог отмениться по таймауту, и кнопка
+  // «Оплатить» у отменённого заказа только обманет
   const order = await fetchMyOrder(number);
-  renderDone(order || orderStub(number), "awaiting");
+  renderDone(order || orderStub(number), order ? stateOf(order) : "awaiting");
   show("done");
-  if (status === "failed") note("Оплата не прошла. Можно попробовать ещё раз.");
+  if (status === "failed" && order && awaitingPayment(order)) {
+    note("Оплата не прошла. Можно попробовать ещё раз.");
+  }
+}
+
+/** Режим экрана по тому, что знает о заказе сервер. */
+function stateOf(order) {
+  if (order.paid) return order.status === "CANCELED" ? "late" : "paid";
+  if (awaitingPayment(order)) return "awaiting";
+  return order.status === "CANCELED" ? "expired" : "slow";
+}
+
+/** После «paid» из окна: сервер подтвердил, не успел или деньги пришли поздно. */
+function stateAfterPayment(order) {
+  if (!order) return "slow";
+  if (order.paid) return order.status === "CANCELED" ? "late" : "paid";
+  // окно сказало «оплачено», а заказ уже отменён — деньги могли списаться
+  // за отменённый заказ, и об этом надо сказать прямо
+  if (order.status === "CANCELED") return "late";
+  return "slow";
 }
 
 /** Ждёт, пока сервер получит подтверждение оплаты от Telegram. */

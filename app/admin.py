@@ -193,6 +193,9 @@ class OrderDetail(OrderRow):
     provider_charge_id: str | None = None
     # ждёт оплаты картой — подтвердить его вручную нельзя
     awaiting_payment: bool = False
+    # покупатель прямо сейчас в окне оплаты: отменить можно, но деньги
+    # могут успеть списаться — тогда нужен возврат
+    checkout_open: bool = False
     address: str
     delivery_slot: str
     comment: str | None
@@ -517,6 +520,7 @@ def get_order(
         payment_charge_id=order.payment_charge_id,
         provider_charge_id=order.provider_charge_id,
         awaiting_payment=payments.awaiting_payment(order),
+        checkout_open=payments.checkout_open(order),
         regos_error=order.regos_error,
         regos_attempts=order.regos_attempts,
         address=order.address,
@@ -566,8 +570,14 @@ def set_order_status(
             status_code=409,
             detail=f"Из состояния «{current}» так перейти нельзя",
         )
-    order.status = data.status
+    if not order_status.move(db, order, data.status):
+        # пока оператор смотрел на карточку, заказ поменял кто-то другой:
+        # касса, оплата или автоотмена. Вслепую поверх писать нельзя
+        db.rollback()
+        raise HTTPException(status_code=409,
+                            detail="Заказ только что изменился. Обновите карточку")
     db.commit()
+    db.refresh(order)
     if order.status == "CANCELED":
         # сотрудникам об отмене сообщаем отдельно: заказ мог быть уже в сборке
         staff = notify.queue_staff(db, order, notify.staff_canceled(order, "в панели"))
@@ -595,7 +605,7 @@ def push_order_to_regos(
     """
     from app.regos.client import RegosClient, RegosError
     from app.regos.orders_push import (
-        ConfirmError, OrderPushError, item_codes, push_order,
+        PUSHABLE, ConfirmError, OrderPushError, item_codes, push_order,
     )
 
     order = db.get(Order, order_id)
@@ -605,6 +615,15 @@ def push_order_to_regos(
         return {"ok": True, "document_id": order.regos_document_id, "already": True}
     if order.status == "CANCELED":
         raise HTTPException(status_code=400, detail="Отменённый заказ в REGOS не передаётся")
+    # Выгружается только то же, что и автоматически: PUSHABLE. Без этой проверки
+    # неоплаченный заказ картой уходил кассиру по кнопке, синхронизация через
+    # минуту переводила его в «Принят», и запрет ручного подтверждения
+    # обходился одним нажатием
+    if payments.awaiting_payment(order):
+        raise HTTPException(status_code=409,
+                            detail="Заказ не оплачен картой — в REGOS он уйдёт сам после оплаты")
+    if order.status not in PUSHABLE:
+        raise HTTPException(status_code=409, detail="Этот заказ ещё не подтверждён")
 
 
     order.regos_attempts += 1
@@ -653,6 +672,11 @@ def delete_order(
     order = db.get(Order, order_id)
     if order is None:
         raise HTTPException(status_code=404, detail="Заказ не найден")
+    if order.paid_at is not None:
+        # удаление стёрло бы номер платежа, сумму и время — и возвращать деньги
+        # стало бы не по чему. Оплаченный отменяют, а не удаляют
+        raise HTTPException(status_code=409,
+                            detail="Оплаченный заказ удалить нельзя — его можно только отменить")
 
     regos = "в REGOS не выгружался"
     if order.regos_document_id:

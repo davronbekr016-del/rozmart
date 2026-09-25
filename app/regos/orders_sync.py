@@ -116,6 +116,13 @@ def target_status(order: Order, regos_status: dict) -> str | None:
         return None
     if new == "CANCELED":
         return new                  # отмена приходит из любого состояния
+    if order.payment_method == "online" and order.paid_at is None:
+        # Неоплаченный заказ картой в REGOS попасть не должен вовсе. Если всё же
+        # попал, «Принят» от кассы не превращает его в оплаченный: подтверждает
+        # такой заказ только уведомление об оплате
+        log.warning("Заказ %s: касса продвинула неоплаченный заказ картой (%s) — не принимаем",
+                    order.number, regos_status.get("name"))
+        return None
     if RANK.get(new, -1) <= RANK.get(order.status, -1):
         # возврат назад: в REGOS такое бывает, покупателю показывать нельзя
         return None
@@ -149,7 +156,9 @@ def sync(db, client: RegosClient | None = None, notify_staff: bool = True) -> di
         if new is None:
             continue
         was = order.status
-        order.status = new
+        # условно: пока ждали ответа REGOS, заказ мог поменять оператор или оплата
+        if not order_status.move(db, order, new):
+            continue
         # отмена на кассе — единственное, о чём сотрудникам надо сказать:
         # остальные переходы они и так видят в REGOS
         if notify_staff and new == "CANCELED":
