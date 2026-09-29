@@ -14,6 +14,7 @@ from app.catalog import router as catalog_router
 from app.db import get_db, init_db
 from app.geocode import router as geocode_router
 from app.orders import router as orders_router
+from app.payme import router as payme_router
 from app.profile import router as profile_router
 from app.regos import orders_sync
 from app.seed import seed_catalog
@@ -68,6 +69,7 @@ app.include_router(bot_router)
 app.include_router(catalog_router)
 app.include_router(geocode_router)
 app.include_router(orders_router)
+app.include_router(payme_router)
 app.include_router(profile_router)
 app.include_router(shop_router)
 

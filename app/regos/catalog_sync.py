@@ -240,6 +240,7 @@ def sync_catalog(
         variant.regos_group_id = (item.get("group") or {}).get("id")
         if barcode := barcodes.get(code):
             variant.barcode = barcode
+        apply_fiscal(variant, item)
         report.updated += 1
 
     # Исчезнувшие из REGOS — скрыть. Не удалять: на фасовку ссылаются
@@ -288,5 +289,22 @@ def _create_variant(db: Session, item: dict, price: int | None, barcode: str | N
         barcode=barcode,
         is_active=False,
     )
+    apply_fiscal(variant, item)
     db.add(variant)
     return variant
+
+
+def apply_fiscal(variant: Variant, item: dict) -> None:
+    """Реквизиты для фискального чека: МХИК (в REGOS — icps), код упаковки
+    и НДС. Нужны при оплате через Payme — без них чек не уйдёт в налоговую.
+
+    Пустое из REGOS не затирает уже известное: код упаковки заполняют
+    в REGOS вручную, и сбой одного прохода не должен его стереть.
+    """
+    if mxik := str(item.get("icps") or "").strip():
+        variant.mxik = mxik
+    if package := str(item.get("package_code") or "").strip():
+        variant.package_code = package
+    vat = item.get("vat") or {}
+    if vat.get("value") is not None:
+        variant.vat_percent = int(round(float(vat["value"]))) if vat.get("enabled", True) else 0

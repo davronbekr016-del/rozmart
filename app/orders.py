@@ -270,6 +270,9 @@ def order_invoice(
 
     Выставляется заново при каждом нажатии «Оплатить»: закрытое без оплаты
     окно — не повод оформлять заказ повторно.
+
+    kind подсказывает приложению, как открыть ссылку: `telegram` — окном
+    оплаты Telegram, `payme` — страницей Payme.
     """
     order = db.scalar(
         select(Order).where(Order.number == number).options(selectinload(Order.items))
@@ -286,8 +289,11 @@ def order_invoice(
         raise HTTPException(status_code=409, detail="Заказ отменён — оплатить его нельзя")
     if not payments.available_for(user.id):
         raise HTTPException(status_code=409, detail="Оплата картой сейчас недоступна")
+    if payments.PROVIDER == "payme":
+        from app import payme
+        return {"link": payme.checkout_url(order), "kind": "payme"}
     try:
-        return {"link": payments.create_invoice_link(order)}
+        return {"link": payments.create_invoice_link(order), "kind": "telegram"}
     except payments.PaymentError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
@@ -299,6 +305,7 @@ def payment_options(user: TelegramUser | None = Depends(current_user)):
     хуже её отсутствия."""
     return {
         "card": payments.available_for(user.id if user else None),
+        "provider": payments.PROVIDER,
         "test": payments.is_test(),
         "unpaid_minutes": payments.UNPAID_MINUTES,
     }

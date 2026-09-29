@@ -77,6 +77,12 @@ class Variant(Base):
     regos_price: Mapped[int | None]
     manual_price: Mapped[int | None]
     barcode: Mapped[str | None] = mapped_column(String(50))
+    # Для фискального чека при оплате через Payme: код МХИК (ИКПУ), код
+    # упаковки и НДС. Приходят из REGOS с синхронизацией каталога. Без них
+    # чек не попадёт в налоговую — см. app/payme.py
+    mxik: Mapped[str | None] = mapped_column(String(20))
+    package_code: Mapped[str | None] = mapped_column(String(20))
+    vat_percent: Mapped[int | None]
     is_active: Mapped[bool] = mapped_column(default=False, server_default=false())
 
     product: Mapped["Product"] = relationship(back_populates="variants")
@@ -264,6 +270,37 @@ class OrderItem(Base):
     # Название и цена берутся из самой строки — они зафиксированы на момент
     # заказа (BR-09), а фото не фиксируем: это та же вещь, снятая заново
     variant: Mapped["Variant"] = relationship()
+
+
+class PaymeTransaction(Base):
+    """Транзакция Payme (Merchant API).
+
+    Payme ведёт платёж сам и спрашивает нас по шагам: можно ли, создай,
+    проведи, отмени. Состояние транзакции — по протоколу Payme:
+    1 создана, 2 проведена, -1 отменена до проведения, -2 отменена после.
+    Времена — миллисекунды Unix, как их ждёт Payme в ответах.
+
+    Отдельно от заказа: по одному заказу транзакций может быть несколько
+    (покупатель бросил оплату и начал заново), а Payme сверяет каждую.
+    """
+
+    __tablename__ = "payme_transactions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # идентификатор транзакции у Payme. Уникален: Payme повторяет запросы
+    payme_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    # SET NULL: удалённый заказ не должен уносить историю платежей
+    order_id: Mapped[int | None] = mapped_column(
+        ForeignKey("orders.id", ondelete="SET NULL"), index=True)
+    # номер заказа, как его прислал Payme, — на случай, если заказ удалят
+    order_number: Mapped[str] = mapped_column(String(20))
+    amount: Mapped[int] = mapped_column(BigInteger)          # в тийинах
+    payme_time: Mapped[int] = mapped_column(BigInteger)      # время у Payme
+    create_time: Mapped[int] = mapped_column(BigInteger)
+    perform_time: Mapped[int] = mapped_column(BigInteger, default=0)
+    cancel_time: Mapped[int] = mapped_column(BigInteger, default=0)
+    state: Mapped[int]
+    reason: Mapped[int | None]
 
 
 class StaffChat(Base):

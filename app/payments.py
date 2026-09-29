@@ -1,6 +1,18 @@
-"""Оплата картой через Telegram Payments.
+"""Оплата картой: общее для обоих способов и Telegram Payments.
 
-Покупатель платит в окне Telegram, не выходя из приложения; провайдер — Click.
+Способов два, выбирается PAYMENT_PROVIDER:
+
+* `telegram` — Telegram Payments: окно оплаты внутри Telegram, провайдер
+  подключается в BotFather. Описан ниже;
+* `payme` — Merchant API Payme: покупатель уходит на страницу Payme, а Payme
+  сам спрашивает наш сервер по шагам. Только так Payme передаёт фискальный
+  чек в налоговую. См. app/payme.py.
+
+Общее у них: заказ ждёт оплаты в NEW и в REGOS не уходит, неоплаченный
+отменяется через UNPAID_MINUTES, оплата проводится одной условной записью
+(`mark_paid`), тестовый режим открыт только тестировщикам.
+
+Telegram Payments. Покупатель платит в окне Telegram, не выходя из приложения.
 Путь заказа:
 
 1. Оформление: заказ получает NEW «Ждёт оплаты» и в REGOS не уходит — NEW нет
@@ -38,8 +50,18 @@ from app.telegram import BOT_TOKEN
 
 log = logging.getLogger(__name__)
 
+# Способ оплаты: telegram или payme.
+PROVIDER = os.getenv("PAYMENT_PROVIDER", "telegram").strip().lower()
+
 # Токен провайдера из BotFather. В репозитории его нет — только на сервере.
 TOKEN = os.getenv("PAYMENT_PROVIDER_TOKEN", "").strip()
+
+# Payme Merchant API: ID кассы и ключ (тестовый или боевой) из кабинета Payme.
+PAYME_MERCHANT_ID = os.getenv("PAYME_MERCHANT_ID", "").strip()
+PAYME_KEY = os.getenv("PAYME_KEY", "").strip()
+# Тестовый режим по умолчанию: боевой включается только явным PAYME_TEST=0.
+# Перепутать в эту сторону безопасно, в обратную — нет
+PAYME_TEST = os.getenv("PAYME_TEST", "1").strip() != "0"
 
 # Секрет вебхука магазинного бота. Без него вебхук отвергает всё, и оплата
 # гарантированно не пройдёт: запрос перед списанием уйдёт в тайм-аут.
@@ -55,8 +77,9 @@ TEST_USERS = {
 UNPAID_MINUTES = int(os.getenv("UNPAID_ORDER_MINUTES", "30"))
 
 # Пока окно оплаты открыто, заказ по таймауту не отменяем. Пять минут — с запасом
-# на ввод карты и подтверждение по СМС.
-CHECKOUT_GRACE = timedelta(minutes=5)
+# на ввод карты и подтверждение по СМС. У Payme покупатель уходит на другую
+# страницу, иногда в приложение Payme, — там дольше, поэтому запас больше.
+CHECKOUT_GRACE = timedelta(minutes=15 if PROVIDER == "payme" else 5)
 
 CURRENCY = "UZS"
 # У сума в Telegram два знака после запятой (exp=2): суммы передаются в тийинах.
@@ -82,10 +105,14 @@ class PaymentError(Exception):
 
 
 def enabled() -> bool:
+    if PROVIDER == "payme":
+        return bool(PAYME_MERCHANT_ID and PAYME_KEY)
     return bool(TOKEN and SHOP_SECRET)
 
 
 def is_test() -> bool:
+    if PROVIDER == "payme":
+        return PAYME_TEST
     return ":TEST:" in TOKEN
 
 
@@ -245,15 +272,8 @@ def record_payment(db, payment: dict) -> tuple[str, Order | None]:
                   order.number, charge, order.status, order.paid_at)
         return "late", order
 
-    # Условная запись: заказ всё ещё NEW и не оплачен. Если в эту же долю
-    # секунды его отменила автоотмена или провёл второй платёж, запись
-    # не пройдёт, и деньги уйдут по ветке «нужен человек», а не пропадут
-    moved = order_status.move(db, order, "CONFIRMED", unpaid_only=True, values={
-        "paid_at": utcnow(),
-        "payment_charge_id": charge,
-        "provider_charge_id": payment.get("provider_payment_charge_id"),
-        "paid_amount": payment["total_amount"] // MINOR,
-    })
+    moved = mark_paid(db, order, charge, payment.get("provider_payment_charge_id"),
+                      payment["total_amount"] // MINOR)
     db.commit()
     db.refresh(order)
     if not moved:
@@ -263,6 +283,26 @@ def record_payment(db, payment: dict) -> tuple[str, Order | None]:
     _invoices.pop(order.number, None)
     log.info("Заказ %s оплачен картой, платёж %s", order.number, charge)
     return "confirmed", order
+
+
+def mark_paid(db, order: Order, charge: str, provider_charge: str | None,
+              amount: int) -> bool:
+    """Отмечает заказ оплаченным и принятым. Коммит — на вызывающем коде.
+
+    Условная запись: заказ всё ещё NEW и не оплачен. Если в эту же долю
+    секунды его отменила автоотмена или провёл второй платёж, запись
+    не пройдёт — и вызывающий код обязан не потерять деньги, а отказать
+    или позвать человека.
+    """
+    # «NEW» — в самой записи, а не только в проверке до неё: move сверяет
+    # статус с тем, что прочитан, и отменённый заказ иначе стал бы оплаченным
+    return order_status.move(db, order, "CONFIRMED", unpaid_only=True,
+                             where=[Order.status == "NEW"], values={
+        "paid_at": utcnow(),
+        "payment_charge_id": charge,
+        "provider_charge_id": provider_charge,
+        "paid_amount": amount,
+    })
 
 
 def cancel_stale(db) -> list[str]:
@@ -321,4 +361,4 @@ def start_worker() -> None:
         return
     _started = True
     threading.Thread(target=worker, name="payments", daemon=True).start()
-    log.info("Оплата картой включена%s", " (тестовый режим)" if is_test() else "")
+    log.info("Оплата картой включена: %s%s", PROVIDER, " (тестовый режим)" if is_test() else "")

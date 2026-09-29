@@ -55,6 +55,10 @@ COLUMNS = [
     ("variants", "regos_price", "INTEGER"),
     ("variants", "manual_price", "INTEGER"),
     ("orders", "price_type_id", "INTEGER"),
+    # фискальный чек Payme: МХИК, код упаковки, НДС
+    ("variants", "mxik", "VARCHAR(20)"),
+    ("variants", "package_code", "VARCHAR(20)"),
+    ("variants", "vat_percent", "INTEGER"),
 ]
 
 # Разовые правки данных после добавления колонок. Каждая безопасна при повторе.

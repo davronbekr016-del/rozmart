@@ -597,7 +597,8 @@ async function submitOrder() {
  *   awaiting — картой, ещё не оплачен: кнопка «Оплатить»;
  *   checking — окно оплаты закрылось с «paid», ждём подтверждения сервера;
  *   paid     — сервер подтвердил оплату;
- *   slow     — подтверждение задерживается: скажем, где смотреть статус.
+ *   slow     — подтверждение задерживается: скажем, где смотреть статус;
+ *   external — покупатель ушёл платить на страницу Payme.
  * «Оплачено» показываем только по слову сервера — не по статусу окна. */
 function renderDone(order, mode) {
   const card = order.payment_method === "online";
@@ -616,6 +617,8 @@ function renderDone(order, mode) {
       "Время на оплату вышло. Оформите заказ заново."],
     late: ["ti-alert-triangle", "Заказ отменён, а оплата прошла",
       "Магазин свяжется с вами, чтобы вернуть деньги или восстановить заказ."],
+    external: ["ti-external-link", "Оплатите на странице Payme",
+      `Когда оплатите, вернитесь сюда — статус обновится сам.<br>${esc(payUntilText(order))}`],
   }[mode];
   const spin = mode === "checking" ? "animation:spin 1s linear infinite;" : "";
   const sumLabel = mode === "paid" ? "Оплачено" : (card ? "К оплате" : "Оплата курьеру");
@@ -629,6 +632,10 @@ function renderDone(order, mode) {
     </div>
     ${mode === "awaiting" ? `<button class="btn" data-pay="${esc(order.number)}" style="margin-bottom:14px">
       Оплатить${order.total ? " " + money(order.total) : ""}</button>` : ""}
+    ${mode === "external" ? `<button class="btn" data-check-pay="${esc(order.number)}" style="margin-bottom:10px">
+      Я оплатил — проверить</button>
+      <button class="btn" data-pay="${esc(order.number)}" style="margin-bottom:14px;background:#F2F2F2;color:#1A1A1A">
+      Открыть Payme ещё раз</button>` : ""}
     <div class="card" style="background:#F7F7F7;text-align:center">
       <div class="mut" style="font-size:12px;margin-bottom:4px">Номер заказа</div>
       <div style="font-size:21px;font-weight:600;letter-spacing:.6px">${esc(order.number)}</div>
@@ -1477,17 +1484,25 @@ function availablePayments() {
   return PAYMENTS.filter(([code]) => code !== "online" || state.cardAvailable);
 }
 
-/** Выставляет счёт и открывает окно оплаты. */
+/** Выставляет счёт и открывает окно оплаты: окно Telegram или страницу Payme. */
 async function payOrder(number) {
   const tg = window.Telegram && window.Telegram.WebApp;
-  if (!tg || !tg.openInvoice) {
+  if (!tg) {
     return note("Оплатить картой можно только в приложении Telegram.");
   }
   if (state.paying) return;          // двойное нажатие открыло бы два окна
   state.paying = true;
   try {
-    const { link } = await api(`/api/orders/${encodeURIComponent(number)}/invoice`,
+    const { link, kind } = await api(`/api/orders/${encodeURIComponent(number)}/invoice`,
       { method: "POST" });
+    if (kind === "payme") {
+      state.paying = false;
+      return openPayme(tg, number, link);
+    }
+    if (!tg.openInvoice) {
+      state.paying = false;
+      return note("Обновите Telegram, чтобы оплатить картой.");
+    }
     tg.openInvoice(link, (status) => afterInvoice(number, status));
     // окно Telegram модальное: второе поверх не откроется, и держать флаг
     // дольше незачем. А если колбэк не придёт вовсе, кнопка не должна умереть
@@ -1497,6 +1512,50 @@ async function payOrder(number) {
     console.error(error);
     note(error.detail || "Не удалось открыть оплату. Попробуйте ещё раз.");
   }
+}
+
+/* Payme. Покупатель уходит на страницу Payme (оттуда — в приложение Payme,
+ * если оно есть) и возвращается сам. Узнать, чем кончилось, можно только
+ * у сервера: Payme сообщает об оплате ему. Поэтому, когда приложение снова
+ * на экране, спрашиваем сервер несколько раз подряд — подтверждение приходит
+ * через секунду-другую после оплаты. */
+function openPayme(tg, number, link) {
+  state.payingExternal = number;
+  if (tg.openLink) tg.openLink(link); else window.open(link, "_blank");
+  const order = (state.orders || []).find((o) => o.number === number);
+  renderDone(order || orderStub(number), "external");
+  show("done");
+}
+
+/** Спрашивает сервер об оплате после возврата со страницы Payme. */
+async function checkExternalPayment(number, byButton) {
+  if (state.checkingPay) return;
+  state.checkingPay = true;
+  try {
+    for (let attempt = 0; attempt < (byButton ? 3 : 5); attempt += 1) {
+      const order = await fetchMyOrder(number);
+      if (order && !awaitingPayment(order)) {
+        state.payingExternal = null;
+        renderDone(order, stateOf(order));
+        show("done");
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+    if (byButton) note("Оплата ещё не поступила. Если вы уже оплатили — подождите минуту.");
+  } finally {
+    state.checkingPay = false;
+  }
+}
+
+function onAppVisible() {
+  if (state.payingExternal && document.visibilityState !== "hidden") {
+    checkExternalPayment(state.payingExternal, false);
+  }
+}
+document.addEventListener("visibilitychange", onAppVisible);
+if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.onEvent) {
+  window.Telegram.WebApp.onEvent("activated", onAppVisible);
 }
 
 /** Что показать после окна оплаты. */
@@ -1664,6 +1723,9 @@ document.addEventListener("click", (event) => {
 
   const payButton = event.target.closest("[data-pay]");
   if (payButton) return payOrder(payButton.dataset.pay);
+
+  const checkPayButton = event.target.closest("[data-check-pay]");
+  if (checkPayButton) return checkExternalPayment(checkPayButton.dataset.checkPay, true);
 
   const orderCardEl = event.target.closest("[data-order]");
   if (orderCardEl) return openOrder(orderCardEl.dataset.order);
