@@ -158,7 +158,9 @@ def prices(order: Order) -> list[dict]:
             "label": f"{item.product_name} {item.weight}{count}"[:60],
             "amount": item.price * item.quantity * MINOR,
         })
-    rows.append({"label": "Доставка", "amount": order.delivery_price * MINOR})
+    # бесплатную доставку строкой с нулём не показываем
+    if order.delivery_price:
+        rows.append({"label": "Доставка", "amount": order.delivery_price * MINOR})
     return rows
 
 

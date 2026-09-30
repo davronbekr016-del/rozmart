@@ -374,8 +374,21 @@ function addToCart() {
 
 /** Корзина лежит на телефоне и могла пролежать до изменения каталога: перед
  *  показом сверяем цены и наличие, чтобы покупатель видел то же, что и сервер. */
+/** Стоимость доставки с сервера: её меняют в панели. */
+async function loadDeliveryPrice() {
+  try {
+    const { delivery_price: price } = await api("/api/delivery-price");
+    state.deliveryPrice = price;
+  } catch (error) {
+    console.error(error);   // нет связи — остаётся прежняя, сервер всё равно сверит итог
+  }
+}
+
 async function refreshCart() {
   if (!state.cart.length) return;
+  // Заодно доставка: если её изменили в панели, пока корзина была открыта,
+  // сервер откажет «цены изменились» — и здесь покупатель увидит новый итог
+  await loadDeliveryPrice();
   const my = ++requestId;
   const ids = [...new Set(state.cart.map((i) => i.productId))];
   let loaded;
@@ -1403,12 +1416,7 @@ async function refreshScreen() {
   }
   if (state.screen === "profile") return loadProfile();
   // каталог: заодно обновляем стоимость доставки — она тоже приходит с сервера
-  try {
-    const { delivery_price: price } = await api("/api/delivery-price");
-    state.deliveryPrice = price;
-  } catch (error) {
-    console.error(error);
-  }
+  await loadDeliveryPrice();
   return loadCatalog();
 }
 

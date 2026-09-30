@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app import notify, order_status, payments, photos
 from app.db import get_db
-from app.models import Counter, Order, OrderItem, Variant
+from app.models import Counter, Order, OrderItem, Setting, Variant
 from app.profile import save_customer
 from app.regos import prices
 from app.schemas import OrderIn, OrderItemOut, OrderOut
@@ -17,8 +17,28 @@ from app.telegram import TelegramUser, buyer, current_user, require_user
 router = APIRouter(prefix="/api", tags=["Заказы"])
 
 # BR-11: стоимость доставки фиксированная и единая для зоны обслуживания.
-# Значение подтверждает заказчик; когда появится админка — переедет в настройки (FR-13.6).
+# Меняет её администратор в панели (FR-13.6), значение лежит в настройках.
+# Здесь — только цена по умолчанию, пока в панели её не задавали
 DELIVERY_PRICE = 12000
+DELIVERY_SETTING = "delivery_price"
+# защита от лишнего нуля: доставка по городу дороже миллиона — опечатка
+MAX_DELIVERY_PRICE = 1_000_000
+
+
+def delivery_price(db: Session) -> int:
+    """Стоимость доставки для новых заказов. Оформленные хранят свою (BR-10)."""
+    row = db.get(Setting, DELIVERY_SETTING)
+    if row is not None and row.value.isdigit():
+        return int(row.value)
+    return DELIVERY_PRICE
+
+
+def save_delivery_price(db: Session, price: int) -> None:
+    row = db.get(Setting, DELIVERY_SETTING)
+    if row is None:
+        db.add(Setting(name=DELIVERY_SETTING, value=str(price)))
+    else:
+        row.value = str(price)
 
 STATUS_BY_PAYMENT = order_status.BY_PAYMENT
 
@@ -186,7 +206,7 @@ def create_order(
         payment_method=data.payment_method,
         price_type_id=prices.current(db),
         goods_total=0,
-        delivery_price=DELIVERY_PRICE,
+        delivery_price=delivery_price(db),
         total=0,
     )
 
@@ -212,7 +232,7 @@ def create_order(
         )
 
     order.goods_total = goods_total
-    order.total = goods_total + DELIVERY_PRICE
+    order.total = goods_total + order.delivery_price
 
     # покупатель подтверждает конкретную сумму: если каталог успел измениться,
     # оформляем не молча по новой цене, а возвращаем его в корзину
@@ -331,6 +351,10 @@ def my_orders(
 
 
 @router.get("/delivery-price")
-def delivery_price():
-    """Стоимость доставки, чтобы клиент показывал итог до оформления."""
-    return {"delivery_price": DELIVERY_PRICE}
+def get_delivery_price(response: Response, db: Session = Depends(get_db)):
+    """Стоимость доставки, чтобы клиент показывал итог до оформления.
+
+    Без кэша: цену меняют в панели, и старая в корзине дала бы отказ
+    «цены изменились» при оформлении."""
+    response.headers["Cache-Control"] = "no-store"
+    return {"delivery_price": delivery_price(db)}

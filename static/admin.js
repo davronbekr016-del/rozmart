@@ -550,6 +550,40 @@
     api('/regos/auto').then(renderAuto).catch(function (e) { say(e.message); });
     loadChats();
     loadPriceTypes();
+    loadDelivery();
+  }
+
+  // --------------------------------------------------- стоимость доставки
+
+  function showDelivery(r) {
+    document.getElementById('deliveryPrice').value = r.price;
+    document.getElementById('deliveryNote').textContent =
+      'Сейчас: ' + (r.price ? money(r.price) : 'бесплатно') + '.';
+  }
+
+  function loadDelivery() {
+    api('/delivery-price').then(showDelivery).catch(function (e) {
+      document.getElementById('deliveryNote').textContent = 'Не загрузилось: ' + e.message;
+    });
+  }
+
+  function saveDelivery() {
+    var raw = document.getElementById('deliveryPrice').value.trim();
+    var price = Number(raw);
+    if (raw === '' || !Number.isInteger(price) || price < 0) {
+      return say('Укажите стоимость доставки целым числом, 0 — бесплатно');
+    }
+    if (price > 1000000) return say('Слишком дорого для доставки — проверьте, нет ли лишнего нуля');
+    var text = price ? money(price) : 'бесплатная доставка';
+    if (!confirm('Новые заказы — ' + text + '. Сохранить?')) return;
+    api('/delivery-price', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ price: price })
+    }).then(function (r) {
+      showDelivery(r);
+      say('Стоимость доставки сохранена', 'ok');
+    }).catch(function (e) { say(e.message); });
   }
 
   function renderAuto(data) {
@@ -827,6 +861,7 @@
 
   // Удаление необратимо, поэтому сначала показываем, сколько именно уедет,
   // и только вторым нажатием выполняем.
+  document.getElementById('deliverySave').onclick = saveDelivery;
   document.getElementById('priceCheck').onclick = function () { priceChange(false); };
   document.getElementById('priceApply').onclick = function () { priceChange(true); };
   document.getElementById('priceType').onchange = function () {

@@ -825,6 +825,36 @@ def set_variant_price(
     return get_product(variant.product_id, db)
 
 
+class DeliveryPriceIn(BaseModel):
+    # 0 — бесплатная доставка
+    price: int = Field(ge=0, le=1_000_000)
+
+
+@router.get("/delivery-price")
+def admin_delivery_price(db: Session = Depends(get_db),
+                         _: TelegramUser = Depends(require_admin)):
+    from app import orders as orders_api
+    return {"price": orders_api.delivery_price(db), "default": orders_api.DELIVERY_PRICE}
+
+
+@router.put("/delivery-price")
+def set_delivery_price(data: DeliveryPriceIn, db: Session = Depends(get_db),
+                       _: TelegramUser = Depends(require_admin)):
+    """Стоимость доставки для новых заказов.
+
+    Оформленные заказы не меняются: сумма в них зафиксирована (BR-10).
+    Покупатель, у которого корзина открыта со старой ценой, при оформлении
+    получит «цены изменились» и увидит новый итог — молча другую сумму
+    с него не возьмут.
+    """
+    from app import orders as orders_api
+    before = orders_api.delivery_price(db)
+    orders_api.save_delivery_price(db, data.price)
+    db.commit()
+    log.info("Стоимость доставки: %s -> %s", before, data.price)
+    return {"price": data.price, "default": orders_api.DELIVERY_PRICE}
+
+
 class PriceTypeIn(BaseModel):
     price_type_id: int = Field(ge=1)
 
