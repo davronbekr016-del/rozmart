@@ -59,6 +59,9 @@ COLUMNS = [
     ("variants", "mxik", "VARCHAR(20)"),
     ("variants", "package_code", "VARCHAR(20)"),
     ("variants", "vat_percent", "INTEGER"),
+    # фискальный чек из SetFiscalData
+    ("payme_transactions", "fiscal_qr_url", "TEXT"),
+    ("payme_transactions", "fiscal_data", "TEXT"),
 ]
 
 # Разовые правки данных после добавления колонок. Каждая безопасна при повторе.

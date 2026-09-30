@@ -22,10 +22,16 @@ Payme повторяет запросы, если не дождался отве
 
 Доступ — по ключу кассы в заголовке Authorization (Basic, логин «Paycom»).
 Можно дополнительно ограничить адреса, с которых Payme ходит к нам
-(PAYME_ALLOWED_IPS).
+(PAYME_ALLOWED_IPS, адреса и подсети): по документации Payme это
+185.234.113.1–185.234.113.15.
+
+SetFiscalData — необязательный метод: Payme присылает в него фискальный чек
+из налоговой после проведения. Сохраняем его у транзакции.
 """
 import base64
 import hmac
+import ipaddress
+import json
 import logging
 import os
 import time
@@ -62,7 +68,19 @@ CHECKOUT_URL = os.getenv(
 # Куда Payme вернёт покупателя после оплаты — обычно ссылка на бота магазина
 RETURN_URL = os.getenv("PAYME_RETURN_URL", "").strip()
 
-ALLOWED_IPS = {x.strip() for x in os.getenv("PAYME_ALLOWED_IPS", "").split(",") if x.strip()}
+# адреса и подсети через запятую, например 185.234.113.0/28
+ALLOWED_NETS = [ipaddress.ip_network(x.strip(), strict=False)
+                for x in os.getenv("PAYME_ALLOWED_IPS", "").split(",") if x.strip()]
+
+
+def allowed_ip(host: str | None) -> bool:
+    if not ALLOWED_NETS:
+        return True
+    try:
+        address = ipaddress.ip_address(host or "")
+    except ValueError:
+        return False
+    return any(address in net for net in ALLOWED_NETS)
 
 # Созданная, но не проведённая транзакция живёт 12 часов — так по протоколу
 TIMEOUT_MS = 12 * 60 * 60 * 1000
@@ -386,6 +404,27 @@ def statement(db: Session, params: dict) -> dict:
     } for tx in rows]}
 
 
+def set_fiscal(db: Session, params: dict) -> dict:
+    """Фискальный чек от Payme: сохраняем как есть и QR-ссылку отдельно."""
+    fiscal = params.get("fiscal_data")
+    payme_id = params.get("id")
+    if not isinstance(payme_id, str) or not isinstance(fiscal, dict):
+        raise PaymeError(-32602, "Неверные параметры", "Noto'g'ri parametrlar", "Invalid params")
+    tx = db.scalar(select(PaymeTransaction).where(PaymeTransaction.payme_id == payme_id))
+    if tx is None:
+        raise PaymeError(-32001, "Чек не найден", "Chek topilmadi", "Receipt not found")
+    kind = str(params.get("type") or "")
+    stored = json.loads(tx.fiscal_data) if tx.fiscal_data else {}
+    stored[kind or "PERFORM"] = fiscal
+    tx.fiscal_data = json.dumps(stored, ensure_ascii=False)
+    if kind != "CANCEL" and fiscal.get("qr_code_url"):
+        tx.fiscal_qr_url = str(fiscal["qr_code_url"])
+    db.commit()
+    log.info("Payme: фискальный чек %s по заказу %s, статус %s",
+             kind, tx.order_number, fiscal.get("status_code"))
+    return {"success": True}
+
+
 METHODS = {
     "CheckPerformTransaction": lambda db, p, bg: check_perform(db, p),
     "CreateTransaction": lambda db, p, bg: create(db, p),
@@ -393,6 +432,7 @@ METHODS = {
     "CancelTransaction": cancel,
     "CheckTransaction": lambda db, p, bg: check(db, p),
     "GetStatement": lambda db, p, bg: statement(db, p),
+    "SetFiscalData": lambda db, p, bg: set_fiscal(db, p),
 }
 
 
@@ -441,7 +481,7 @@ async def payme_endpoint(request: Request, background: BackgroundTasks,
 
     if payments.PROVIDER != "payme" or not payments.enabled():
         return answer(request_id, error=err_auth())
-    if ALLOWED_IPS and (request.client is None or request.client.host not in ALLOWED_IPS):
+    if not allowed_ip(request.client.host if request.client else None):
         log.warning("Payme: запрос с чужого адреса %s", request.client and request.client.host)
         return answer(request_id, error=err_auth())
     if not authorized(request.headers.get("Authorization")):

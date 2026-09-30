@@ -301,6 +301,10 @@ class PaymeTransaction(Base):
     cancel_time: Mapped[int] = mapped_column(BigInteger, default=0)
     state: Mapped[int]
     reason: Mapped[int | None]
+    # Фискальный чек из налоговой — Payme присылает его методом SetFiscalData
+    # после проведения (и отдельно на возврат). QR-ссылка ведёт на чек в ОФД
+    fiscal_qr_url: Mapped[str | None] = mapped_column(Text)
+    fiscal_data: Mapped[str | None] = mapped_column(Text)   # всё, что прислали, JSON
 
 
 class StaffChat(Base):

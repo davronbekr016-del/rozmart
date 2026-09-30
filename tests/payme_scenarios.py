@@ -279,6 +279,25 @@ row = next(x for x in r["result"]["transactions"] if x["id"] == "tx-A")
 check(14, "В выписке номер заказа и состояние", row["account"] == {"order_id": o1["number"]}
       and row["state"] == -2)
 
+# ------------------------------------------------------------ фискальный чек
+r = rpc("SetFiscalData", {"id": "tx-E", "type": "PERFORM", "fiscal_data": {
+    "receipt_id": 1, "status_code": 0, "message": "ok", "terminal_id": "EP000000000025",
+    "fiscal_sign": "123", "qr_code_url": "https://ofd.soliq.uz/check?t=EP1&r=1", "date": "20260930101010"}})
+check(16, "SetFiscalData принят", (r.get("result") or {}).get("success") is True, r)
+check(16, "QR-ссылка чека сохранена у транзакции",
+      tx_row("tx-E").fiscal_qr_url == "https://ofd.soliq.uz/check?t=EP1&r=1")
+check(16, "Чек по неизвестной транзакции — -32001",
+      code(rpc("SetFiscalData", {"id": "nope", "type": "PERFORM", "fiscal_data": {}})) == -32001)
+
+import app.payme as payme_module  # noqa: E402
+payme_module.ALLOWED_NETS = [payme_module.ipaddress.ip_network("185.234.113.0/28")]
+check(17, "Адрес Payme из подсети пропускается", payme_module.allowed_ip("185.234.113.7"))
+check(17, "Чужой адрес — нет", not payme_module.allowed_ip("8.8.8.8")
+      and not payme_module.allowed_ip("185.234.113.20") and not payme_module.allowed_ip(None))
+check(17, "С чужого адреса запрос отвергается",
+      code(rpc("CheckTransaction", {"id": "tx-A"})) == -32504)   # TestClient — «testclient»
+payme_module.ALLOWED_NETS = []
+
 # ------------------------------------------------------------ синхронизация кодов из REGOS
 v = Variant(product_id=prod.id, external_code="009999", weight="1 кг", price=1)
 apply_fiscal(v, {"icps": "01601001001000000", "package_code": "1399448",
