@@ -243,6 +243,13 @@ def sync_catalog(
         apply_fiscal(variant, item)
         report.updated += 1
 
+    # Коды для фискального чека нужны у всего, что продаёт витрина. А витрина
+    # бывает шире выбранных групп: товар опубликовали, потом группу сняли
+    # с отбора — и в выборку выше он больше не попадает. Такие берём
+    # отдельным запросом по их кодам
+    fill_fiscal(db, client, [v for v in prices.storefront_variants(db)
+                             if v.external_code not in seen], price_type_id)
+
     # Исчезнувшие из REGOS — скрыть. Не удалять: на фасовку ссылаются
     # оформленные заказы (BR-09), а внешний ключ стоит на RESTRICT.
     # Сверяем с полным перечнем кодов, а не с выборкой: позиция вне фильтра
@@ -292,6 +299,34 @@ def _create_variant(db: Session, item: dict, price: int | None, barcode: str | N
     apply_fiscal(variant, item)
     db.add(variant)
     return variant
+
+
+def fill_fiscal(db: Session, client: RegosClient, variants: list[Variant],
+                price_type_id: int) -> int:
+    """МХИК, код упаковки и НДС для фасовок вне выборки — по их кодам."""
+    by_code = {v.external_code: v for v in variants}
+    codes = list(by_code)
+    filled = 0
+    for start in range(0, len(codes), prices.CHUNK):
+        chunk = codes[start:start + prices.CHUNK]
+        result = client.call("Item/GetExt", {
+            "limit": len(chunk), "offset": 0,
+            "filters": [
+                {"Field": "stock_id", "Operator": "Equal", "Value": str(config.STOCK_ID)},
+                {"Field": "price_type_id", "Operator": "Equal", "Value": str(price_type_id)},
+                {"Field": "code", "Operator": "In",
+                 "Value": ",".join(str(int(code)) for code in chunk)},
+            ],
+        })
+        rows = result.get("result") if isinstance(result, dict) else result
+        for row in rows or []:
+            variant = by_code.get(external_code(row["item"]))
+            if variant is not None:
+                apply_fiscal(variant, row["item"])
+                filled += 1
+    if variants:
+        log.info("коды для чека по фасовкам витрины вне выборки: %s из %s", filled, len(variants))
+    return filled
 
 
 def apply_fiscal(variant: Variant, item: dict) -> None:
