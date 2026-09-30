@@ -158,7 +158,7 @@ r = client.post(f"/api/orders/{o1['number']}/invoice", headers=TESTER).json()
 decoded = base64.b64decode(r["link"].rsplit("/", 1)[1]).decode()
 amount1 = o1["total"] * 100
 check(4, "Ссылка ведёт на песочницу Payme", r["kind"] == "payme"
-      and r["link"].startswith("https://checkout.test.paycom.uz/"), r["link"])
+      and r["link"].startswith("https://test.paycom.uz/"), r["link"])
 check(4, "В ссылке касса, номер заказа, сумма в тийинах и возврат в бота",
       decoded == f"m=65f0c0ffee0000000000abcd;ac.order_id={o1['number']};a={amount1};l=ru;"
                  "c=https://t.me/rozmartuz_bot", decoded)

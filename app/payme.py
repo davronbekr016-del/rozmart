@@ -50,10 +50,11 @@ WEBHOOK_PATH = "/payme"
 # Поле заказа в «account». Так же оно должно называться в настройках кассы Payme
 ACCOUNT_FIELD = "order_id"
 
-# Страница оплаты. У песочницы своя
+# Страница оплаты. У песочницы своя — по документации Payme «URL отправки
+# чека в песочницу: https://test.paycom.uz»
 CHECKOUT_URL = os.getenv(
     "PAYME_CHECKOUT_URL",
-    "https://checkout.test.paycom.uz" if payments.PAYME_TEST else "https://checkout.paycom.uz",
+    "https://test.paycom.uz" if payments.PAYME_TEST else "https://checkout.paycom.uz",
 ).strip().rstrip("/")
 
 # Куда Payme вернёт покупателя после оплаты — обычно ссылка на бота магазина
