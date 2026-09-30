@@ -243,6 +243,15 @@ def _expired(tx: PaymeTransaction) -> bool:
     return now_ms() - tx.create_time > TIMEOUT_MS
 
 
+def _mark_checkout(order: Order) -> None:
+    """Покупатель на странице оплаты: пока платит, автоотмена заказ не трогает.
+    Только продлеваем — отметку, поставленную на будущее (тестовый заказ
+    для песочницы), очередной запрос Payme не сокращает."""
+    now = utcnow()
+    if order.checkout_at is None or order.checkout_at < now:
+        order.checkout_at = now
+
+
 def _cancel(tx: PaymeTransaction, reason: int) -> None:
     tx.state = CANCELED_AFTER if tx.state == PERFORMED else CANCELED
     tx.reason = reason
@@ -254,8 +263,7 @@ def _cancel(tx: PaymeTransaction, reason: int) -> None:
 def check_perform(db: Session, params: dict) -> dict:
     order = _order_by_account(db, params)
     _check_payable(order, params.get("amount"))
-    # покупатель на странице оплаты: пока платит, заказ не отменяем
-    order.checkout_at = utcnow()
+    _mark_checkout(order)
     db.commit()
     return {"allow": True, "detail": receipt(order)}
 
@@ -299,7 +307,7 @@ def create(db: Session, params: dict) -> dict:
         perform_time=0, cancel_time=0, state=CREATED, reason=None,
     )
     db.add(tx)
-    order.checkout_at = utcnow()
+    _mark_checkout(order)
     try:
         db.commit()
     except IntegrityError:
