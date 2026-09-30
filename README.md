@@ -82,7 +82,7 @@ uvicorn app.main:app --reload
 | `PAYME_TEST` | `0` — боевой режим. По умолчанию тестовый: песочница Payme и оплата только для `PAYMENT_TEST_USERS` |
 | `PAYME_RETURN_URL` | Куда Payme вернёт покупателя после оплаты, например `https://t.me/rozmartuz_bot` |
 | `PAYME_ALLOWED_IPS` | Адреса Payme через запятую. Задан — запросы с других адресов отвергаются |
-| `PAYME_CHECKOUT_URL` | Страница оплаты, если нужна не стандартная. По умолчанию `test.paycom.uz` в тесте и `checkout.paycom.uz` в бою |
+| `PAYME_CHECKOUT_URL` | Страница оплаты, если нужна не стандартная. По умолчанию `checkout.test.paycom.uz` в тесте и `checkout.paycom.uz` в бою |
 
 ## Установка с нуля
 
