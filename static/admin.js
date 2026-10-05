@@ -425,6 +425,10 @@
         o.lat != null ? 'https://maps.google.com/?q=' + o.lat + ',' + o.lon : null],
        ['Доставка', o.delivery_slot],
        ['Оплата', paymentText(o)],
+       ['Доставщик', o.courier_name
+          ? o.courier_name + ' · взял ' + new Date(o.courier_taken_at).toLocaleString('ru-RU')
+            + (o.delivered_at ? ' · доставил ' + new Date(o.delivered_at).toLocaleString('ru-RU') : '')
+          : '—'],
        ['Комментарий', o.comment || '—'],
        ['Оформлен', new Date(o.created_at).toLocaleString('ru-RU')]
       ].forEach(function (pair) {
@@ -765,6 +769,62 @@
 
   function loadChats() {
     api('/notify/chats').then(renderChats).catch(function (e) { say(e.message); });
+    loadCouriers();
+  }
+
+  // --------------------------------------------------- доставщики
+
+  function loadCouriers() {
+    api('/couriers').then(renderCouriers).catch(function (e) { say(e.message); });
+  }
+
+  function renderCouriers(data) {
+    var box = document.getElementById('couriers');
+    var name = document.getElementById('courierBot');
+    if (name && data.bot) name.textContent = '@' + data.bot;
+    box.innerHTML = '';
+    if (!data.enabled) {
+      box.appendChild(el('div', 'meta', 'Бот доставщиков не настроен: не задан токен.'));
+      return;
+    }
+    if (!data.couriers.length) {
+      box.appendChild(el('div', 'meta',
+        'Пока боту никто не писал. Попросите доставщика нажать в нём «Старт».'));
+      return;
+    }
+    data.couriers.forEach(function (c) {
+      var row = el('div');
+      row.style.cssText = 'display:flex;gap:10px;align-items:center;margin-bottom:8px;'
+        + 'max-width:640px;padding:9px 11px;border:1px solid #ECECEC;border-radius:10px';
+      var who = el('div');
+      who.style.cssText = 'flex:1;min-width:0';
+      var title = el('div', null, '🚚 ' + c.name);
+      title.style.fontWeight = '500';
+      who.appendChild(title);
+      var sub = [];
+      if (c.username) sub.push('@' + c.username);
+      if (c.in_delivery) sub.push('в доставке: ' + c.in_delivery);
+      if (sub.length) who.appendChild(el('div', 'meta', sub.join(' · ')));
+      row.appendChild(who);
+      row.appendChild(el('span', 'pill ' + (c.access ? 'ok' : 'no'),
+                         c.access ? 'видит заказы' : 'нет доступа'));
+      var btn = el('button', 'act' + (c.access ? ' ghost' : ''),
+                   c.access ? 'Отключить' : 'Дать доступ');
+      btn.onclick = function () {
+        if (c.access && c.in_delivery && !confirm('У доставщика ' + c.in_delivery
+            + ' заказ(ов) в пути. Они станут свободными. Отключить?')) return;
+        btn.disabled = true;
+        api('/couriers/' + c.telegram_id, { method: c.access ? 'DELETE' : 'POST' })
+          .then(function (r) {
+            say(c.access ? 'Отключён' + (r.released && r.released.length
+              ? ', освобождены: ' + r.released.join(', ') : '') : 'Доступ выдан', 'ok');
+            loadCouriers();
+          })
+          .catch(function (e) { say(e.message); btn.disabled = false; });
+      };
+      row.appendChild(btn);
+      box.appendChild(row);
+    });
   }
 
   function renderCats(cats) {

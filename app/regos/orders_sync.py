@@ -163,6 +163,10 @@ def sync(db, client: RegosClient | None = None, notify_staff: bool = True) -> di
         # остальные переходы они и так видят в REGOS
         if notify_staff and new == "CANCELED":
             notify.queue_staff(db, order, notify.staff_canceled(order, "на кассе"))
+        if new == "CANCELED":
+            # заказ мог быть у доставщика в пути — пусть не везёт
+            from app import courier_bot
+            courier_bot.order_canceled(order)
         changed.append({"number": order.number, "from": was, "to": new,
                         "regos": status.get("name")})
         log.info("Заказ %s: %s -> %s (REGOS: %s)",

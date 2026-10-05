@@ -238,6 +238,16 @@ class Order(Base):
     # иначе деньги спишутся за заказ, которого уже нет
     checkout_at: Mapped[datetime | None] = mapped_column(DateTime)
 
+    # Доставщик, который взял заказ в боте доставщиков (app/courier_bot.py).
+    # Взять может только один: захват — условная запись «пока никто не взял».
+    # courier_prev_status — в каком состоянии заказ был до захвата: отказавшись,
+    # доставщик возвращает его туда, и заказ снова виден всем
+    courier_id: Mapped[int | None] = mapped_column(BigInteger, index=True)
+    courier_name: Mapped[str | None] = mapped_column(String(200))
+    courier_taken_at: Mapped[datetime | None] = mapped_column(DateTime)
+    courier_prev_status: Mapped[str | None] = mapped_column(String(20))
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime)
+
     # Выгрузка в REGOS. Отправка идёт после оформления и вне запроса покупателя:
     # недоступная учётная система не должна мешать людям заказывать.
     # id документа — признак «уже выгружен», по нему же видно, что искать в REGOS.
@@ -305,6 +315,24 @@ class PaymeTransaction(Base):
     # после проведения (и отдельно на возврат). QR-ссылка ведёт на чек в ОФД
     fiscal_qr_url: Mapped[str | None] = mapped_column(Text)
     fiscal_data: Mapped[str | None] = mapped_column(Text)   # всё, что прислали, JSON
+
+
+class Courier(Base):
+    """Доставщик — человек, который написал боту доставщиков.
+
+    Писать боту может кто угодно, поэтому запись сначала без доступа:
+    в карточке заказа телефон и адрес покупателя. Доступ включает
+    администратор в панели — так же, как у служебного бота.
+    """
+
+    __tablename__ = "couriers"
+
+    # личный чат с ботом: его id совпадает с id пользователя Telegram
+    telegram_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    name: Mapped[str] = mapped_column(String(200))
+    username: Mapped[str | None] = mapped_column(String(64))
+    active: Mapped[bool] = mapped_column(default=False, server_default=false())
+    added_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class StaffChat(Base):

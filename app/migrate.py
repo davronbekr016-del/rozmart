@@ -62,6 +62,12 @@ COLUMNS = [
     # фискальный чек из SetFiscalData
     ("payme_transactions", "fiscal_qr_url", "TEXT"),
     ("payme_transactions", "fiscal_data", "TEXT"),
+    # бот доставщиков: кто взял заказ и когда доставил
+    ("orders", "courier_id", "BIGINT"),
+    ("orders", "courier_name", "VARCHAR(200)"),
+    ("orders", "courier_taken_at", "TIMESTAMP"),
+    ("orders", "courier_prev_status", "VARCHAR(20)"),
+    ("orders", "delivered_at", "TIMESTAMP"),
 ]
 
 # Разовые правки данных после добавления колонок. Каждая безопасна при повторе.
@@ -76,6 +82,7 @@ DATA_FIXES = [
 INDEXES = [
     ("ix_variants_regos_group_id", "variants", "regos_group_id"),
     ("ix_orders_regos_document_id", "orders", "regos_document_id"),
+    ("ix_orders_courier_id", "orders", "courier_id"),
 ]
 
 # Уникальные индексы отдельно: на них держится защита от двойного проведения

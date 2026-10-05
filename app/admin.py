@@ -198,6 +198,10 @@ class OrderDetail(OrderRow):
     # покупатель прямо сейчас в окне оплаты: отменить можно, но деньги
     # могут успеть списаться — тогда нужен возврат
     checkout_open: bool = False
+    # доставщик из бота доставщиков: кто взял, когда, когда доставил
+    courier_name: str | None = None
+    courier_taken_at: str | None = None
+    delivered_at: str | None = None
     address: str
     delivery_slot: str
     comment: str | None
@@ -524,6 +528,11 @@ def get_order(
         provider_charge_id=order.provider_charge_id,
         awaiting_payment=payments.awaiting_payment(order),
         checkout_open=payments.checkout_open(order),
+        courier_name=order.courier_name,
+        courier_taken_at=(order.courier_taken_at.replace(tzinfo=timezone.utc).isoformat()
+                          if order.courier_taken_at else None),
+        delivered_at=(order.delivered_at.replace(tzinfo=timezone.utc).isoformat()
+                      if order.delivered_at else None),
         regos_error=order.regos_error,
         regos_attempts=order.regos_attempts,
         address=order.address,
@@ -592,6 +601,9 @@ def set_order_status(
         if order.regos_document_id:
             from app.regos.orders_push import cancel_one
             background.add_task(cancel_one, order_id)
+        # заказ мог быть уже у доставщика в пути — пусть не везёт
+        from app import courier_bot
+        background.add_task(courier_bot.order_canceled, order)
     return get_order(order_id, db)
 
 
@@ -765,6 +777,75 @@ def revoke_notify_access(
     db.commit()
     log.info("Чат %s (%s) отключён от заказов", chat_id, chat.title)
     return {"chat_id": chat_id, "access": False}
+
+
+# --------------------------------------------------------------- доставщики
+
+
+@router.get("/couriers")
+def couriers(db: Session = Depends(get_db), _: TelegramUser = Depends(require_admin)):
+    """Кто писал боту доставщиков и у кого есть доступ к заказам."""
+    from app import courier_bot
+    from app.models import Courier
+
+    busy = dict(db.execute(
+        select(Order.courier_id, func.count()).where(
+            Order.courier_id.is_not(None), Order.status == "DELIVERING")
+        .group_by(Order.courier_id)).all())
+    rows = [{
+        "telegram_id": c.telegram_id, "name": c.name, "username": c.username,
+        "access": c.active, "in_delivery": busy.get(c.telegram_id, 0),
+    } for c in db.scalars(select(Courier))]
+    rows.sort(key=lambda r: (not r["access"], r["name"].lower()))
+    bot = ""
+    if courier_bot.enabled():
+        try:
+            bot = courier_bot.call("getMe", {}).get("username", "")
+        except notify.NotifyError:
+            bot = ""
+    return {"enabled": courier_bot.enabled(), "bot": bot, "couriers": rows}
+
+
+@router.post("/couriers/{telegram_id}")
+def grant_courier(telegram_id: int, db: Session = Depends(get_db),
+                  _: TelegramUser = Depends(require_admin)):
+    """Доставщик начинает видеть заказы — с телефоном и адресом покупателя."""
+    from app import courier_bot
+    from app.models import Courier
+
+    courier = db.get(Courier, telegram_id)
+    if courier is None:
+        raise HTTPException(status_code=404,
+                            detail="Бот не знает этого человека. Попросите написать боту.")
+    courier.active = True
+    db.commit()
+    log.info("Доставщику %s (%s) выдан доступ", telegram_id, courier.name)
+    courier_bot.send(telegram_id, "Доступ к заказам включён.\n\n" + courier_bot.WELCOME,
+                     courier_bot.KEYBOARD)
+    return {"telegram_id": telegram_id, "access": True}
+
+
+@router.delete("/couriers/{telegram_id}")
+def revoke_courier(telegram_id: int, background: BackgroundTasks, db: Session = Depends(get_db),
+                   _: TelegramUser = Depends(require_admin)):
+    """Отключает доставщика. Его заказы в пути становятся свободными:
+    иначе они висели бы «в доставке» ни у кого."""
+    from app import courier_bot
+    from app.models import Courier
+
+    courier = db.get(Courier, telegram_id)
+    if courier is None:
+        raise HTTPException(status_code=404, detail="Такого доставщика нет в списке")
+    courier.active = False
+    db.commit()
+    released = courier_bot.release_all(db, telegram_id)
+    for number in released:
+        order = db.scalar(select(Order).where(Order.number == number))
+        courier_bot.staff(db, background, order,
+                          f"↩️ Доставщик {notify.esc(courier.name)} отключён — заказ "
+                          f"<b>{notify.esc(number)}</b> снова свободен")
+    log.info("Доставщик %s отключён, освобождены заказы: %s", telegram_id, released)
+    return {"telegram_id": telegram_id, "access": False, "released": released}
 
 
 @router.post("/regos/photos")

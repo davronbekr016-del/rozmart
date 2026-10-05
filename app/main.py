@@ -11,6 +11,7 @@ from app.admin import router as admin_router
 from app import admin_auth, notify, payments
 from app.bot import router as bot_router
 from app.catalog import router as catalog_router
+from app.courier_bot import router as courier_router
 from app.db import get_db, init_db
 from app.geocode import router as geocode_router
 from app.orders import router as orders_router
@@ -67,6 +68,7 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR, check_dir=False), name="s
 app.include_router(admin_router)
 app.include_router(bot_router)
 app.include_router(catalog_router)
+app.include_router(courier_router)
 app.include_router(geocode_router)
 app.include_router(orders_router)
 app.include_router(payme_router)
