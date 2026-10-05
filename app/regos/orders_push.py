@@ -133,7 +133,39 @@ def _description(order: Order) -> str:
     parts += [f"ROZMART {order.number}", order.customer_name, order.delivery_slot]
     if order.comment:
         parts.append(order.comment.strip())
-    return " | ".join(p for p in parts if p)
+    return " | ".join(p for p in parts if p) + "\n" + _receipt_lines(order)
+
+
+# Сколько позиций печатать: листок у кассы узкий, а примечание не резиновое
+RECEIPT_ITEMS = 25
+
+
+def _sum(value: int) -> str:
+    return f"{value:,}".replace(",", " ")
+
+
+def _receipt_lines(order: Order) -> str:
+    """Состав заказа и суммы — в конец примечания.
+
+    Листок, который печатает касса, собирает REGOS по своему шаблону, и
+    позиций документа в нём нет: только покупатель, адрес и примечание.
+    Сборщику и курьеру нужен состав, поэтому кладём его сюда, по строке на
+    позицию: «название / количество × цена = сумма». Ниже — доставка и итог.
+    """
+    lines = ["---- Состав заказа ----"]
+    for item in order.items[:RECEIPT_ITEMS]:
+        lines.append(f"{item.product_name} {item.weight}".strip())
+        lines.append(f"  {item.quantity} x {_sum(item.price)} = {_sum(item.price * item.quantity)}")
+    if len(order.items) > RECEIPT_ITEMS:
+        rest = order.items[RECEIPT_ITEMS:]
+        lines.append(f"…и ещё {len(rest)} поз. на {_sum(sum(i.price * i.quantity for i in rest))}")
+    lines += [
+        "-----------------------",
+        f"Товары: {_sum(order.goods_total)} сум",
+        f"Доставка: {_sum(order.delivery_price)} сум" if order.delivery_price else "Доставка: бесплатно",
+        f"ИТОГО: {_sum(order.total)} сум",
+    ]
+    return "\n".join(lines)
 
 
 def push_order(client: RegosClient, order: Order, item_ids: dict[int, str]) -> int:

@@ -122,6 +122,23 @@ check(6, "В счёте Telegram нет строки доставки с нул�
       and sum(p["amount"] for p in payments.prices(row)) == 72000 * 100)
 check(6, "В чеке Payme нет доставки", "shipping" not in receipt(row))
 
+# ------------------------------------------------------------ листок кассы
+from app.regos.orders_push import build_payload  # noqa: E402
+
+s = SessionLocal()
+paid = s.query(Order).filter_by(number=new["number"]).one()
+desc = build_payload(paid, {variant.id: "003100"})["document"]["description"]
+print(desc)
+lines = desc.split("\n")
+check(7, "Примечание начинается как раньше: номер, покупатель, срок",
+      lines[0].startswith(f"ROZMART {new['number']} | Жавохир | Как можно скорее"))
+check(7, "В примечании товар, количество, цена и сумма",
+      "Докторская 400 г" in lines and "  2 x 36 000 = 72 000" in lines)
+check(7, "В конце — товары, доставка и итог",
+      lines[-3:] == ["Товары: 72 000 сум", "Доставка: 15 000 сум", "ИТОГО: 87 000 сум"], lines[-3:])
+free_desc = build_payload(row, {variant.id: "003100"})["document"]["description"]
+check(7, "Бесплатная доставка так и написана", "Доставка: бесплатно" in free_desc)
+
 failed = [r for r in results if not r[2]]
 print(f"\nИтого проверок: {len(results)}, не прошло: {len(failed)}")
 sys.exit(1 if failed else 0)
