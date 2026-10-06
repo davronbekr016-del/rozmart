@@ -273,6 +273,17 @@ def edit(chat_id: int, message_id: int, text: str, markup: dict | None) -> None:
     safe_call("editMessageText", payload)
 
 
+def remove(chat_id: int, message_id: int, fallback: str) -> None:
+    """Убирает сообщение с заказом из чата. Telegram даёт удалять свои
+    сообщения только 48 часов — старше не удалится, тогда хотя бы снимаем
+    с него кнопки и пишем, что с ним стало."""
+    try:
+        call("deleteMessage", {"chat_id": chat_id, "message_id": message_id})
+    except notify.NotifyError as exc:
+        log.info("Бот доставщиков: сообщение %s не удалено (%s)", message_id, exc)
+        edit(chat_id, message_id, fallback, None)
+
+
 def answer(callback_id: str, text: str = "", alert: bool = False) -> None:
     safe_call("answerCallbackQuery", {"callback_query_id": callback_id, "text": text,
                                       "show_alert": alert})
@@ -340,9 +351,12 @@ def handle_callback(db: Session, background: BackgroundTasks, query: dict) -> No
     if action == "take":
         if take(db, order_id, courier):
             order = current()
-            answer(callback_id, "Заказ ваш")
-            edit(chat_id, message_id, card(order) + "\n\n✅ <b>Вы приняли заказ.</b> "
-                 f"Он в разделе «{BTN_DELIVERY}».", delivery_markup(order))
+            # Принятый заказ из списка свободных убираем: в чате остаются
+            # только те, что ещё можно взять. Он теперь в «Доставке»
+            answer(callback_id, f"✅ Заказ {order.number} принят — он в разделе «{BTN_DELIVERY}»",
+                   True)
+            remove(chat_id, message_id, card(order) + "\n\n✅ <b>Вы приняли заказ.</b> "
+                   f"Он в разделе «{BTN_DELIVERY}».")
             staff(db, background, order, f"🚚 Заказ <b>{notify.esc(order.number)}</b> "
                                          f"взял доставщик {notify.esc(courier.name)}")
             log.info("Заказ %s взял доставщик %s", order.number, courier.telegram_id)
@@ -354,7 +368,7 @@ def handle_callback(db: Session, background: BackgroundTasks, query: dict) -> No
                 return
             answer(callback_id, "Не получилось: заказ уже взял другой доставщик."
                    if order.courier_id else "Заказ уже недоступен.", True)
-            edit(chat_id, message_id, card(order) + "\n\n⛔ Заказ уже недоступен.", None)
+            remove(chat_id, message_id, card(order) + "\n\n⛔ Заказ уже недоступен.")
         return
 
     if action in ("done", "drop"):

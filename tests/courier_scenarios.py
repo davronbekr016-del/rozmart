@@ -202,8 +202,12 @@ calls = press(A, f"take:{oid}")
 got = row(cash1)
 check(5, "Принял — заказ «В доставке» и за ним", got.status == "DELIVERING"
       and got.courier_id == A and got.courier_prev_status == "CONFIRMED")
-msg = edited(calls)
-check(5, "Под заказом сразу «Завершить», «Отменить» и карта",
+check(5, "Принятый заказ сразу исчезает из чата",
+      ("deleteMessage", {"chat_id": A, "message_id": 77}) in calls and edited(calls) is None)
+check(5, "Всплывает «принят — он в разделе Доставка»", "в разделе «🚚 Доставка»" in alert_text(calls))
+delivery = [p for p in say(A, "🚚 Доставка") if (p.get("reply_markup") or {}).get("inline_keyboard")]
+msg = delivery[0] if delivery else None
+check(5, "В «Доставке» у него «Завершить», «Отменить» и карта",
       msg and [b["text"] for b in msg["reply_markup"]["inline_keyboard"][0]] == ["✔️ Завершить", "↩️ Отменить"]
       and msg["reply_markup"]["inline_keyboard"][1][0]["url"] == "https://maps.google.com/?q=41.3,69.2")
 check(5, "Сотрудникам — кто взял заказ", any("взял доставщик Курьер501" in t for t in staff_texts()))
@@ -211,6 +215,8 @@ check(5, "Сотрудникам — кто взял заказ", any("взял 
 calls = press(B, f"take:{oid}")
 check(6, "Второй доставщик тот же заказ не возьмёт", "другой доставщик" in alert_text(calls)
       and row(cash1).courier_id == A)
+check(6, "И у него этот заказ исчезает из чата",
+      ("deleteMessage", {"chat_id": B, "message_id": 77}) in calls)
 check(6, "У второго в «Заказах» его больше нет",
       all(cash1 not in p["text"] for p in say(B, "📦 Заказы")))
 check(6, "У первого он в «Доставке»", any(cash1 in p["text"] for p in say(A, "🚚 Доставка")))
@@ -281,6 +287,26 @@ check(11, "Отключили — его заказы снова свободн�
 calls = press(B, f"take:{o3}")
 check(11, "Отключённый больше ничего не берёт", "Нет доступа" in alert_text(calls)
       and row(cash3).courier_id is None)
+
+# ------------------------------------------------------------ старше 48 часов
+cash4 = order("courier-key-005")
+real_call = notify.call
+
+
+def old_message(method, payload, token=None):
+    if method == "deleteMessage":
+        raise notify.NotifyError("deleteMessage: 400 message can't be deleted")
+    return real_call(method, payload, token)
+
+
+notify.call = old_message
+client.post(f"/api/admin/couriers/{B}", headers=ADMIN)
+calls = press(B, f"take:{row(cash4).id}")
+notify.call = real_call
+msg = edited(calls)
+check(12, "Не удалилось (старше 48 часов) — кнопки сняты, написано «вы приняли»",
+      row(cash4).courier_id == B and msg and "Вы приняли заказ" in msg["text"]
+      and "reply_markup" not in msg)
 
 failed = [r for r in results if not r[2]]
 print(f"\nИтого проверок: {len(results)}, не прошло: {len(failed)}")
