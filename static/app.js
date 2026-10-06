@@ -49,6 +49,15 @@ const PAYMENTS = [
   ["telegram", "pay_online", "ti-credit-card"],
 ];
 const PROVIDER_NAME = { payme: "Payme", paynet: "Paynet", telegram: "Telegram" };
+// Плитки «Онлайн оплаты»: показываются всегда. Не включённый для покупателя
+// способ — бледный, с пометкой «Скоро»: нажал — объясняем, что пока наличными.
+// Логотипы — надписи в цветах самих сервисов: файлов логотипов у нас нет
+const ONLINE = ["payme", "paynet"];
+const LOGO = {
+  payme: `<span class="lg lg-payme"><b>pay</b><i>me</i></span>`,
+  paynet: `<span class="lg lg-paynet">paynet</span>`,
+  telegram: `<span class="lg"><i class="ti ti-brand-telegram"></i></span>`,
+};
 
 // ---------- язык ----------
 
@@ -75,6 +84,9 @@ const I18N = {
     pay_cash: "Наличными курьеру", pay_online: "Онлайн картой",
     pay_payme: "Картой через Payme", pay_paynet: "Через Paynet",
     pay_with: "Оплатить через {name}",
+    pay_online_group: "Онлайн оплата", soon: "Скоро",
+    soon_note: "Оплата через {name} скоро появится. Пока можно оплатить наличными курьеру.",
+    pick_online: "Выберите, чем оплатить онлайн: Payme или Paynet.",
     confirm_order: "Подтвердить заказ",
     fill_fields: "Заполните имя, номер телефона в формате +998 XX XXX XX XX и адрес доставки.",
     need_consent: "Отметьте согласие на обработку данных.",
@@ -169,6 +181,10 @@ const I18N = {
     pay_cash: "Kuryerga naqd pul", pay_online: "Karta orqali onlayn",
     pay_payme: "Payme orqali karta bilan", pay_paynet: "Paynet orqali",
     pay_with: "{name} orqali to'lash",
+    pay_online_group: "Onlayn to'lov", soon: "Tez orada",
+    soon_note: "{name} orqali to'lov tez orada qo'shiladi. Hozircha kuryerga naqd pul bilan "
+      + "to'lashingiz mumkin.",
+    pick_online: "Onlayn to'lov usulini tanlang: Payme yoki Paynet.",
     confirm_order: "Buyurtmani tasdiqlash",
     fill_fields: "Ism, +998 XX XXX XX XX formatidagi telefon raqami va yetkazib berish "
       + "manzilini kiriting.",
@@ -765,11 +781,27 @@ function renderCheckout() {
       <i class="ti ${state.slot === name ? "ti-circle-check" : "ti-circle"}"></i>
     </div>`).join("");
 
-  el("payments").innerHTML = availablePayments().map(([code, name, icon]) => `
-    <div class="opt ${state.payment === code ? "on" : ""}" data-payment="${code}">
-      <span style="font-size:14px"><i class="ti ${icon}" style="color:#E30613"></i> ${esc(t(name))}</span>
-      <i class="ti ${state.payment === code ? "ti-circle-check" : "ti-circle"}"></i>
-    </div>`).join("");
+  // «Онлайн оплата» выбрана — способом (payme, paynet) или пока без него
+  const online = state.payment !== "cash";
+  const tiles = [...ONLINE, ...(state.providers || []).filter((p) => !ONLINE.includes(p))];
+  el("payments").innerHTML = `
+    <div class="opt ${!online ? "on" : ""}" data-payment="cash">
+      <span style="font-size:14px"><i class="ti ti-cash" style="color:#E30613"></i> ${esc(t("pay_cash"))}</span>
+      <i class="ti ${!online ? "ti-circle-check" : "ti-circle"}"></i>
+    </div>
+    <div class="opt ${online ? "on" : ""}" data-payment="online">
+      <span style="font-size:14px"><i class="ti ti-credit-card" style="color:#E30613"></i> ${esc(t("pay_online_group"))}</span>
+      <i class="ti ${online ? "ti-circle-check" : "ti-circle"}"></i>
+    </div>
+    ${online ? `<div class="ptiles">${tiles.map((p) => {
+      const ready = (state.providers || []).includes(p);
+      return `<div class="ptile ${state.payment === p ? "on" : ""} ${ready ? "" : "soon"}"
+          data-pick="${esc(p)}" role="button">
+        ${LOGO[p] || esc(PROVIDER_NAME[p] || p)}
+        <div class="ptile-name">${esc(PROVIDER_NAME[p] || p)}</div>
+        ${ready ? "" : `<span class="soon-badge">${esc(t("soon"))}</span>`}
+      </div>`;
+    }).join("")}</div>` : ""}`;
 
   el("checkout-total").innerHTML = totalsRows();
   el("submit-order").textContent = `${t("confirm_order")} · ${money(goodsTotal() + state.deliveryPrice)}`;
@@ -798,6 +830,7 @@ async function submitOrder() {
     return showError(t("fill_fields"));
   }
   if (needConsent) return showError(t("need_consent"));
+  if (state.payment === "online") return showError(t("pick_online"));
 
   state.sending = true;
   el("submit-order").textContent = t("sending");
@@ -1768,7 +1801,9 @@ async function loadPaymentOptions() {
   }
   state.cardAvailable = state.providers.length > 0;
   // выбранный раньше способ мог стать недоступным — не оставляем его выбранным
-  if (state.payment !== "cash" && !state.providers.includes(state.payment)) state.payment = "cash";
+  if (!["cash", "online"].includes(state.payment) && !state.providers.includes(state.payment)) {
+    state.payment = "online";
+  }
   if (state.screen === "checkout") renderCheckout();
 }
 
@@ -2132,7 +2167,28 @@ document.addEventListener("click", (event) => {
   }
   const payment = event.target.closest("[data-payment]");
   if (payment) {
-    state.payment = payment.dataset.payment;
+    const code = payment.dataset.payment;
+    // «Онлайн оплата»: если доступен ровно один способ — сразу он, иначе
+    // покупатель выбирает плитку
+    if (code === "online") {
+      if (state.payment === "cash") {
+        const ready = state.providers || [];
+        state.payment = ready.length === 1 ? ready[0] : "online";
+      }
+    } else {
+      state.payment = code;
+    }
+    el("checkout-error").classList.add("hidden");
+    return renderCheckout();
+  }
+  const pick = event.target.closest("[data-pick]");
+  if (pick) {
+    const provider = pick.dataset.pick;
+    if (!(state.providers || []).includes(provider)) {
+      return note(t("soon_note", { name: PROVIDER_NAME[provider] || provider }));
+    }
+    state.payment = provider;
+    el("checkout-error").classList.add("hidden");
     return renderCheckout();
   }
   if (event.target.closest("#to-checkout")) {
