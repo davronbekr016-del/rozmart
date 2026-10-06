@@ -605,7 +605,15 @@
       f.appendChild(wrap);
     } else {
       input.type = kind === 'secret' ? 'password' : 'text';
-      input.autocomplete = 'off';
+      // Браузер принимает пару «текст + пароль» за форму входа и подставляет
+      // логин и пароль от панели — так в «Ключ кассы» однажды попало не то.
+      // new-password и «только чтение до касания» отбивают автозаполнение
+      input.autocomplete = kind === 'secret' ? 'new-password' : 'off';
+      input.name = 'pay-' + name.toLowerCase() + '-' + Date.now();
+      input.setAttribute('data-lpignore', 'true');
+      input.setAttribute('data-1p-ignore', 'true');
+      input.readOnly = true;
+      input.addEventListener('focus', function () { input.readOnly = false; });
       input.spellcheck = false;
       // секрет и ID кассы — только хвостом; поле пустое, вписанное заменяет
       if (kind === 'secret' || kind === 'masked') {
@@ -632,6 +640,13 @@
   }
 
   function saveConfig(values, done) {
+    // Ключ и режим Payme — это живые деньги: переспрашиваем
+    if ((values.PAYME_KEY || values.PAYME_MERCHANT_ID) && !confirm(
+        'Заменить ' + (values.PAYME_KEY ? 'ключ' : 'ID') + ' кассы Payme?\n\n'
+        + 'Если он не совпадает с кабинетом Payme Business, оплаты у покупателей '
+        + 'перестанут проходить.')) return;
+    if (values.PAYNET_PASSWORD && !confirm('Заменить пароль Paynet? Старый перестанет работать — '
+        + 'новый нужно сразу передать Paynet.')) return;
     api('/payments/config', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },

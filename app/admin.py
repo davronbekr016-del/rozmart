@@ -989,6 +989,13 @@ def set_payment_config(data: PaymentConfigIn, request: Request, db: Session = De
             raise HTTPException(status_code=400, detail="Режим — 0 или 1")
         if name in payments.SECRETS and len(value) < 8:
             raise HTTPException(status_code=400, detail="Ключ или пароль короче 8 символов")
+        # Ключ кассы, похожий на ID кассы, — почти наверняка вставили не то
+        # (однажды так и вышло: боевой Payme перестал к нам пускаться)
+        if name == "PAYME_KEY" and (re.fullmatch(r"[0-9a-f]{24}", value)
+                                     or value == payments.PAYME_MERCHANT_ID):
+            raise HTTPException(status_code=400,
+                                detail="Это похоже на ID кассы, а не на ключ. Ключ — из кабинета "
+                                       "Payme Business, поле «Ключ» в настройках кассы")
         values[name] = value
     payments.set_config(db, values)
     # что поменяли — в журнал, без значений секретов
