@@ -2073,6 +2073,9 @@ function setLang(lang) {
     console.error(error);   // приватный режим — выбор продержится до закрытия
   }
   applyStatic();
+  // показанная ошибка — на прежнем языке: прячем, при новой попытке появится заново
+  el("checkout-error").classList.add("hidden");
+  el("profile-error").classList.add("hidden");
   renderCategories();
   if (state.allProducts.length) showCurrentList();
   renderAddrBar();
