@@ -126,6 +126,7 @@ def to_out(order: Order) -> OrderOut:
         delivery_price=order.delivery_price,
         total=order.total,
         paid=order.paid_at is not None,
+        pay_provider=order.pay_provider,
         pay_until=(until.replace(tzinfo=timezone.utc)
                    if (until := payments.pay_until(order)) else None),
         items=[
@@ -161,11 +162,15 @@ def create_order(
     # Оплату картой проверяет сервер, а не витрина: скрыть кнопку — не защита.
     # Пока токен тестовый, платить картой могут только тестировщики — иначе
     # любой «оплатит» заказ тестовой картой и получит товар даром
-    if data.payment_method == "online" and not payments.available_for(telegram_id):
-        raise HTTPException(
-            status_code=400,
-            detail="Оплата картой пока недоступна. Выберите оплату наличными.",
-        )
+    pay_provider = None
+    if data.payment_method == "online":
+        allowed = payments.providers_for(telegram_id)
+        pay_provider = data.pay_provider or (allowed[0] if allowed else None)
+        if pay_provider not in allowed:
+            raise HTTPException(
+                status_code=400,
+                detail="Оплата картой пока недоступна. Выберите оплату наличными.",
+            )
 
     quantities: dict[int, int] = {}
     for item in data.items:
@@ -204,6 +209,7 @@ def create_order(
         delivery_slot=data.delivery_slot,
         comment=data.comment,
         payment_method=data.payment_method,
+        pay_provider=pay_provider,
         price_type_id=prices.current(db),
         goods_total=0,
         delivery_price=delivery_price(db),
@@ -283,6 +289,7 @@ def create_order(
 @router.post("/orders/{number}/invoice")
 def order_invoice(
     number: str,
+    provider: str | None = None,
     db: Session = Depends(get_db),
     user: TelegramUser = Depends(require_user),
     x_lang: str | None = Header(default=None, alias="X-Lang"),
@@ -293,7 +300,10 @@ def order_invoice(
     окно — не повод оформлять заказ повторно.
 
     kind подсказывает приложению, как открыть ссылку: `telegram` — окном
-    оплаты Telegram, `payme` — страницей Payme.
+    оплаты Telegram, `payme` — страницей Payme, `paynet` — что ввести в Paynet.
+
+    provider — другой способ, чем выбранный при оформлении: не вышло через
+    Payme — можно через Paynet. Выбор запоминается у заказа.
     """
     order = db.scalar(
         select(Order).where(Order.number == number).options(selectinload(Order.items))
@@ -308,9 +318,16 @@ def order_invoice(
         raise HTTPException(status_code=409, detail="Заказ уже оплачен")
     if order.status != "NEW":
         raise HTTPException(status_code=409, detail="Заказ отменён — оплатить его нельзя")
-    if not payments.available_for(user.id):
+    allowed = payments.providers_for(user.id)
+    chosen = provider or order.pay_provider
+    if chosen not in allowed:
+        chosen = None if provider else (allowed[0] if allowed else None)
+    if chosen is None:
         raise HTTPException(status_code=409, detail="Оплата картой сейчас недоступна")
-    if payments.PROVIDER == "paynet":
+    if order.pay_provider != chosen:
+        order.pay_provider = chosen
+        db.commit()
+    if chosen == "paynet":
         # страницы оплаты у Paynet нет: покупатель платит в самом Paynet по
         # номеру заказа. Ссылка — если Paynet даст адрес оплаты сервиса
         from app import paynet
@@ -318,7 +335,7 @@ def order_invoice(
         link = paynet.PAY_URL.format(service=payments.PAYNET_SERVICE_ID, order=digits,
                                      amount=order.total) if paynet.PAY_URL else None
         return {"kind": "paynet", "link": link, "order": digits, "amount": order.total}
-    if payments.PROVIDER == "payme":
+    if chosen == "payme":
         from app import payme
         from app import i18n
         return {"link": payme.checkout_url(order, i18n.lang_of(x_lang)), "kind": "payme"}
@@ -333,10 +350,13 @@ def payment_options(user: TelegramUser | None = Depends(current_user)):
     """Каким способом этому человеку можно платить. Витрина по этому ответу
     решает, показывать ли «Онлайн картой»: кнопка, которая ничего не делает,
     хуже её отсутствия."""
+    allowed = payments.providers_for(user.id if user else None)
     return {
-        "card": payments.available_for(user.id if user else None),
-        "provider": payments.PROVIDER,
-        "test": payments.is_test(),
+        "card": bool(allowed),
+        # способы онлайн-оплаты, которые показать этому человеку, по порядку
+        "providers": allowed,
+        "provider": allowed[0] if allowed else payments.PROVIDER,
+        "test": any(payments.is_test(p) for p in allowed),
         "unpaid_minutes": payments.UNPAID_MINUTES,
     }
 

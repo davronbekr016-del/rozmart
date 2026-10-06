@@ -1,12 +1,20 @@
-"""Оплата картой: общее для обоих способов и Telegram Payments.
+"""Оплата картой: общее для всех способов и Telegram Payments.
 
-Способов два, выбирается PAYMENT_PROVIDER:
+Включённые способы — PAYMENT_PROVIDERS через запятую, например «payme,paynet»
+(старое PAYMENT_PROVIDER — один способ). Покупатель выбирает способ сам при
+оформлении, выбор запоминается у заказа (Order.pay_provider); оплатить можно
+и другим включённым способом. Двойной оплаты не бывает: запись оплаты
+условная (mark_paid), второй платёж по оплаченному заказу не проводится.
+
+Способы:
 
 * `telegram` — Telegram Payments: окно оплаты внутри Telegram, провайдер
   подключается в BotFather. Описан ниже;
 * `payme` — Merchant API Payme: покупатель уходит на страницу Payme, а Payme
   сам спрашивает наш сервер по шагам. Только так Payme передаёт фискальный
-  чек в налоговую. См. app/payme.py.
+  чек в налоговую. См. app/payme.py;
+* `paynet` — универсальный WEB-сервис Paynet: покупатель платит в самом
+  Paynet по номеру заказа. См. app/paynet.py.
 
 Общее у них: заказ ждёт оплаты в NEW и в REGOS не уходит, неоплаченный
 отменяется через UNPAID_MINUTES, оплата проводится одной условной записью
@@ -50,8 +58,12 @@ from app.telegram import BOT_TOKEN
 
 log = logging.getLogger(__name__)
 
-# Способ оплаты: telegram, payme или paynet.
-PROVIDER = os.getenv("PAYMENT_PROVIDER", "telegram").strip().lower()
+# Включённые способы оплаты в том порядке, в каком их видит покупатель.
+KNOWN = ("telegram", "payme", "paynet")
+PROVIDERS = [p for p in (os.getenv("PAYMENT_PROVIDERS") or os.getenv("PAYMENT_PROVIDER")
+                         or "telegram").replace(" ", "").lower().split(",") if p in KNOWN]
+# основной — для заказов, где способ не выбран (оформленных до выбора)
+PROVIDER = PROVIDERS[0] if PROVIDERS else "telegram"
 
 # Токен провайдера из BotFather. В репозитории его нет — только на сервере.
 TOKEN = os.getenv("PAYMENT_PROVIDER_TOKEN", "").strip()
@@ -86,7 +98,7 @@ UNPAID_MINUTES = int(os.getenv("UNPAID_ORDER_MINUTES", "30"))
 # Пока окно оплаты открыто, заказ по таймауту не отменяем. Пять минут — с запасом
 # на ввод карты и подтверждение по СМС. У Payme покупатель уходит на другую
 # страницу, иногда в приложение Payme, — там дольше, поэтому запас больше.
-CHECKOUT_GRACE = timedelta(minutes=15 if PROVIDER in ("payme", "paynet") else 5)
+CHECKOUT_GRACE = timedelta(minutes=15 if {"payme", "paynet"} & set(PROVIDERS) else 5)
 
 CURRENCY = "UZS"
 # У сума в Telegram два знака после запятой (exp=2): суммы передаются в тийинах.
@@ -111,29 +123,50 @@ class PaymentError(Exception):
     """Счёт выставить не удалось. Текст — для покупателя."""
 
 
-def enabled() -> bool:
-    if PROVIDER == "payme":
+def configured(provider: str) -> bool:
+    """Для способа заданы ключи."""
+    if provider == "payme":
         return bool(PAYME_MERCHANT_ID and PAYME_KEY)
-    if PROVIDER == "paynet":
+    if provider == "paynet":
         return bool(PAYNET_LOGIN and PAYNET_PASSWORD and PAYNET_SERVICE_ID)
-    return bool(TOKEN and SHOP_SECRET)
+    if provider == "telegram":
+        return bool(TOKEN and SHOP_SECRET)
+    return False
 
 
-def is_test() -> bool:
-    if PROVIDER == "payme":
+def provider_enabled(provider: str) -> bool:
+    return provider in PROVIDERS and configured(provider)
+
+
+def active() -> list[str]:
+    """Включённые и настроенные способы — в порядке PAYMENT_PROVIDERS."""
+    return [p for p in PROVIDERS if configured(p)]
+
+
+def enabled() -> bool:
+    return bool(active())
+
+
+def is_test(provider: str | None = None) -> bool:
+    provider = provider or PROVIDER
+    if provider == "payme":
         return PAYME_TEST
-    if PROVIDER == "paynet":
+    if provider == "paynet":
         return PAYNET_TEST
     return ":TEST:" in TOKEN
 
 
-def available_for(telegram_id: int | None) -> bool:
-    """Можно ли этому человеку платить картой."""
-    if not enabled():
-        return False
-    if is_test():
-        return telegram_id is not None and telegram_id in TEST_USERS
-    return True
+def providers_for(telegram_id: int | None) -> list[str]:
+    """Какими способами этому человеку можно платить. Тестовый способ —
+    только тестировщикам: иначе любой «оплатит» тестовой картой."""
+    tester = telegram_id is not None and telegram_id in TEST_USERS
+    return [p for p in active() if tester or not is_test(p)]
+
+
+def available_for(telegram_id: int | None, provider: str | None = None) -> bool:
+    """Можно ли этому человеку платить картой — вообще или этим способом."""
+    allowed = providers_for(telegram_id)
+    return provider in allowed if provider else bool(allowed)
 
 
 def awaiting_payment(order: Order) -> bool:
@@ -374,4 +407,5 @@ def start_worker() -> None:
         return
     _started = True
     threading.Thread(target=worker, name="payments", daemon=True).start()
-    log.info("Оплата картой включена: %s%s", PROVIDER, " (тестовый режим)" if is_test() else "")
+    log.info("Оплата картой включена: %s", ", ".join(
+        p + (" (тестовый режим)" if is_test(p) else "") for p in active()))

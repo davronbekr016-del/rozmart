@@ -129,7 +129,7 @@ def _description(order: Order) -> str:
     if order.paid_at is not None:
         from app import payments
         parts.append("ТЕСТ! ОПЛАЧЕНО ОНЛАЙН (ТЕСТОВАЯ ОПЛАТА), ДЕНЬГИ НЕ БРАТЬ"
-                     if payments.is_test() else "ОПЛАЧЕНО ОНЛАЙН, ДЕНЬГИ НЕ БРАТЬ")
+                     if payments.is_test(order.pay_provider) else "ОПЛАЧЕНО ОНЛАЙН, ДЕНЬГИ НЕ БРАТЬ")
     parts += [f"ROZMART {order.number}", order.customer_name, order.delivery_slot]
     if order.comment:
         parts.append(order.comment.strip())

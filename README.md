@@ -78,7 +78,7 @@ uvicorn app.main:app --reload
 | `UNPAID_ORDER_MINUTES` | Через сколько минут отменяется заказ, не оплаченный картой. По умолчанию 30 |
 | `COURIER_BOT_TOKEN` | Токен бота доставщиков. Пусто — бот выключен. Только на сервере |
 | `COURIER_WEBHOOK_SECRET` | Секрет вебхука бота доставщиков |
-| `PAYMENT_PROVIDER` | Способ оплаты картой: `telegram` (по умолчанию, Telegram Payments), `payme` (Merchant API Payme) или `paynet` |
+| `PAYMENT_PROVIDERS` | Включённые способы онлайн-оплаты через запятую, по порядку в приложении: `payme,paynet`. Покупатель выбирает сам; способ без ключей не показывается. Старое `PAYMENT_PROVIDER` — один способ (`telegram`, `payme` или `paynet`) |
 | `PAYNET_LOGIN`, `PAYNET_PASSWORD` | Логин и пароль, с которыми Paynet обращается к `/paynet`. Задаём сами, передаём Paynet |
 | `PAYNET_SERVICE_ID` | Номер сервиса ROZMART у Paynet |
 | `PAYNET_FIELD` | Имя поля с номером заказа в запросах Paynet. По умолчанию `order_id` |
@@ -589,6 +589,17 @@ python -m scripts.setup_payments --check   пробный счёт — пров�
 
 Проверки — `tests/payme_scenarios.py`, 52 проверки: те же случаи, что гоняет
 песочница Payme.
+
+### Выбор способа
+
+Включено несколько способов (`PAYMENT_PROVIDERS=payme,paynet`) — покупатель
+выбирает при оформлении: «Наличными курьеру», «Картой через Payme», «Через
+Paynet». Выбор запоминается у заказа (`Order.pay_provider`). На экране
+«ждёт оплаты» — кнопка выбранного способа и запасные: не вышло через Payme —
+«Оплатить через Paynet». Двойной оплаты не бывает: запись оплаты условная,
+и второй способ по уже оплаченному заказу отказывает (Payme — `-31052`,
+Paynet — `302`). Тестовый способ видят только `PAYMENT_TEST_USERS`. Проверки —
+`tests/providers_scenarios.py`, 13.
 
 ### Paynet
 

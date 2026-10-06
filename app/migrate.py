@@ -76,6 +76,8 @@ COLUMNS = [
     ("orders", "courier_drop_at", "TIMESTAMP"),
     ("couriers", "pending_drop_order_id", "INTEGER"),
     ("couriers", "pending_drop_message_id", "BIGINT"),
+    # выбранный покупателем способ онлайн-оплаты
+    ("orders", "pay_provider", "VARCHAR(20)"),
 ]
 
 # Разовые правки данных после добавления колонок. Каждая безопасна при повторе.

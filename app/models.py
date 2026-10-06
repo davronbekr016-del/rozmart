@@ -208,6 +208,9 @@ class Order(Base):
     delivery_slot: Mapped[str] = mapped_column(String(60))
     comment: Mapped[str | None] = mapped_column(Text)
     payment_method: Mapped[str] = mapped_column(String(20))
+    # способ онлайн-оплаты, выбранный покупателем: payme, paynet или telegram.
+    # Только подсказка, какую оплату открыть: оплатить можно любым включённым
+    pay_provider: Mapped[str | None] = mapped_column(String(20))
 
     # вид цены REGOS, по которому считался заказ. Уходит в документ REGOS:
     # администратор может переключить вид цены, а заказ должен остаться тем,

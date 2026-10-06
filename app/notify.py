@@ -335,7 +335,7 @@ def payment_line(order: Order, lang: str = "ru") -> str:
     курьер, который возьмёт деньги второй раз, — худшее, что тут может быть."""
     if order.paid_at is not None:
         from app import payments
-        return st(lang, "paid") + (st(lang, "paid_test") if payments.is_test() else "")
+        return st(lang, "paid") + (st(lang, "paid_test") if payments.is_test(order.pay_provider) else "")
     key = {"cash": "pay_cash", "online": "pay_online"}.get(order.payment_method)
     return f"💵 {st(lang, key) if key else esc(order.payment_method)}"
 

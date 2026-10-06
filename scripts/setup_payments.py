@@ -40,9 +40,9 @@ def show() -> int:
     print(f"в очереди:  {info.get('pending_update_count', 0)}")
     if info.get("last_error_message"):
         print(f"ошибка:     {info['last_error_message']}")
-    print(f"провайдер:  {'задан' if payments.enabled() else 'НЕ задан'}"
-          f"{' (тестовый)' if payments.is_test() else ''}")
-    if payments.is_test():
+    print(f"провайдер:  {'задан' if payments.configured('telegram') else 'НЕ задан'}"
+          f"{' (тестовый)' if payments.is_test('telegram') else ''}")
+    if payments.is_test("telegram"):
         print(f"тестировщики: {sorted(payments.TEST_USERS) or 'никого — оплату картой не увидит никто'}")
     return 0
 
@@ -78,7 +78,7 @@ def main() -> int:
         return 1
     if args.show:
         return show()
-    if not payments.enabled():
+    if not payments.configured("telegram"):
         print("Не задан PAYMENT_PROVIDER_TOKEN.", file=sys.stderr)
         return 1
     if args.check:

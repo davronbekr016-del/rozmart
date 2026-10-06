@@ -355,7 +355,7 @@ async def paynet_not_post():
 @router.post(WEBHOOK_PATH, include_in_schema=False)
 async def paynet_endpoint(request: Request, background: BackgroundTasks,
                           db: Session = Depends(get_db)):
-    if payments.PROVIDER != "paynet" or not payments.enabled() \
+    if not payments.provider_enabled("paynet") \
             or not authorized(request.headers.get("Authorization")):
         # так требует Paynet: без верного логина и пароля — HTTP 401
         return reply(None, error=err(412), status=401)

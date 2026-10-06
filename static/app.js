@@ -40,10 +40,15 @@ const SLOTS = [
   ["Сегодня вечером", "16:00 – 18:00"],
   ["Завтра утром", "09:00 – 12:00"],
 ];
+// Способы оплаты: наличные — всегда, онлайн — те, что сервер включил
+// для этого покупателя (state.providers). Код — то, что уходит на сервер
 const PAYMENTS = [
   ["cash", "pay_cash", "ti-cash"],
-  ["online", "pay_online", "ti-credit-card"],
+  ["payme", "pay_payme", "ti-credit-card"],
+  ["paynet", "pay_paynet", "ti-wallet"],
+  ["telegram", "pay_online", "ti-credit-card"],
 ];
+const PROVIDER_NAME = { payme: "Payme", paynet: "Paynet", telegram: "Telegram" };
 
 // ---------- язык ----------
 
@@ -68,6 +73,8 @@ const I18N = {
     cart_hint: "Состав можно менять до оформления заказа",
     goods_n: "Товары ({n})", goods: "Товары", delivery: "Доставка", total: "Итого",
     pay_cash: "Наличными курьеру", pay_online: "Онлайн картой",
+    pay_payme: "Картой через Payme", pay_paynet: "Через Paynet",
+    pay_with: "Оплатить через {name}",
     confirm_order: "Подтвердить заказ",
     fill_fields: "Заполните имя, номер телефона в формате +998 XX XXX XX XX и адрес доставки.",
     need_consent: "Отметьте согласие на обработку данных.",
@@ -160,6 +167,8 @@ const I18N = {
     cart_hint: "Buyurtma berilgunga qadar tarkibini o'zgartirish mumkin",
     goods_n: "Mahsulotlar ({n})", goods: "Mahsulotlar", delivery: "Yetkazib berish", total: "Jami",
     pay_cash: "Kuryerga naqd pul", pay_online: "Karta orqali onlayn",
+    pay_payme: "Payme orqali karta bilan", pay_paynet: "Paynet orqali",
+    pay_with: "{name} orqali to'lash",
     confirm_order: "Buyurtmani tasdiqlash",
     fill_fields: "Ism, +998 XX XXX XX XX formatidagi telefon raqami va yetkazib berish "
       + "manzilini kiriting.",
@@ -806,7 +815,8 @@ async function submitOrder() {
         lat: state.point.f ? state.point.f.lat : null,
         lon: state.point.f ? state.point.f.lon : null,
         delivery_slot: state.slot,
-        payment_method: state.payment,
+        payment_method: state.payment === "cash" ? "cash" : "online",
+        pay_provider: state.payment === "cash" ? null : state.payment,
         comment: el("f-comment").value.trim() || null,
         consent: el("agree").checked,
         items: state.cart.map((i) => ({ variant_id: i.variantId, quantity: i.qty })),
@@ -907,10 +917,9 @@ function renderDone(order, mode) {
       <div style="font-size:23px;font-weight:600;margin-bottom:8px">${view[1]}</div>
       <div class="mut" style="margin-bottom:22px;line-height:1.65">${view[2]}</div>
     </div>
-    ${mode === "awaiting" ? `<button class="btn" data-pay="${esc(order.number)}" style="margin-bottom:14px">
-      ${t("pay")}${order.total ? " " + money(order.total) : ""}</button>` : ""}
+    ${mode === "awaiting" ? payButtons(order) : ""}
     ${mode === "paynet" ? `${state.paynet && state.paynet.link
-        ? `<button class="btn" data-pay="${esc(order.number)}" style="margin-bottom:10px">
+        ? `<button class="btn" data-pay="${esc(order.number)}" data-provider="paynet" style="margin-bottom:10px">
             ${t("open_paynet")}</button>` : ""}
       <button class="btn" data-copy="${esc((state.paynet && state.paynet.order) || order.number)}"
         style="margin-bottom:10px;background:#F2F2F2;color:#1A1A1A">${t("copy_number")}</button>
@@ -918,7 +927,7 @@ function renderDone(order, mode) {
         ${t("i_paid")}</button>` : ""}
     ${mode === "external" ? `<button class="btn" data-check-pay="${esc(order.number)}" style="margin-bottom:10px">
       ${t("i_paid")}</button>
-      <button class="btn" data-pay="${esc(order.number)}" style="margin-bottom:14px;background:#F2F2F2;color:#1A1A1A">
+      <button class="btn" data-pay="${esc(order.number)}" data-provider="payme" style="margin-bottom:14px;background:#F2F2F2;color:#1A1A1A">
       ${t("payme_again")}</button>` : ""}
     <div class="card" style="background:#F7F7F7;text-align:center">
       <div class="mut" style="font-size:12px;margin-bottom:4px">${t("order_number")}</div>
@@ -1751,23 +1760,41 @@ document.addEventListener("touchend", async () => {
 async function loadPaymentOptions() {
   try {
     const options = await api("/api/payment-options");
-    state.cardAvailable = Boolean(options.card);
+    state.providers = options.providers || (options.card ? [options.provider] : []);
     state.unpaidMinutes = options.unpaid_minutes || 30;
   } catch (error) {
     console.error(error);
-    state.cardAvailable = false;   // не узнали — не предлагаем
+    state.providers = [];   // не узнали — не предлагаем
   }
-  // выбранная раньше карта могла стать недоступной — не оставляем её выбранной
-  if (!state.cardAvailable && state.payment === "online") state.payment = "cash";
+  state.cardAvailable = state.providers.length > 0;
+  // выбранный раньше способ мог стать недоступным — не оставляем его выбранным
+  if (state.payment !== "cash" && !state.providers.includes(state.payment)) state.payment = "cash";
   if (state.screen === "checkout") renderCheckout();
 }
 
 function availablePayments() {
-  return PAYMENTS.filter(([code]) => code !== "online" || state.cardAvailable);
+  return PAYMENTS.filter(([code]) => code === "cash" || (state.providers || []).includes(code));
+}
+
+/** Кнопки оплаты неоплаченного заказа: выбранный способ — главной кнопкой,
+ *  остальные — запасными: не вышло через Payme — можно через Paynet. */
+function payButtons(order) {
+  const providers = (state.providers || []).length ? state.providers
+    : [order.pay_provider].filter(Boolean);
+  if (!providers.length) {
+    return `<button class="btn" data-pay="${esc(order.number)}" style="margin-bottom:14px">
+      ${t("pay")}${order.total ? " " + money(order.total) : ""}</button>`;
+  }
+  const main = providers.includes(order.pay_provider) ? order.pay_provider : providers[0];
+  const ordered = [main, ...providers.filter((p) => p !== main)];
+  return ordered.map((p, i) => `
+    <button class="btn" data-pay="${esc(order.number)}" data-provider="${esc(p)}"
+      style="margin-bottom:${i === ordered.length - 1 ? 14 : 10}px${i ? ";background:#F2F2F2;color:#1A1A1A" : ""}">
+      ${t("pay_with", { name: PROVIDER_NAME[p] || p })}${i === 0 && order.total ? " · " + money(order.total) : ""}</button>`).join("");
 }
 
 /** Выставляет счёт и открывает окно оплаты: окно Telegram или страницу Payme. */
-async function payOrder(number) {
+async function payOrder(number, provider) {
   const tg = window.Telegram && window.Telegram.WebApp;
   if (!tg) {
     return note(t("tg_only"));
@@ -1775,7 +1802,10 @@ async function payOrder(number) {
   if (state.paying) return;          // двойное нажатие открыло бы два окна
   state.paying = true;
   try {
-    const invoice = await api(`/api/orders/${encodeURIComponent(number)}/invoice`,
+    // provider — способ, отличный от выбранного при оформлении; без него
+    // сервер откроет тот, что выбран у заказа
+    const query = provider ? `?provider=${encodeURIComponent(provider)}` : "";
+    const invoice = await api(`/api/orders/${encodeURIComponent(number)}/invoice${query}`,
       { method: "POST" });
     const { link, kind } = invoice;
     if (kind === "payme") {
@@ -2044,7 +2074,7 @@ document.addEventListener("click", (event) => {
   if (langButton) return setLang(langButton.dataset.lang);
 
   const payButton = event.target.closest("[data-pay]");
-  if (payButton) return payOrder(payButton.dataset.pay);
+  if (payButton) return payOrder(payButton.dataset.pay, payButton.dataset.provider);
 
   const copyButton = event.target.closest("[data-copy]");
   if (copyButton) return copyText(copyButton.dataset.copy);

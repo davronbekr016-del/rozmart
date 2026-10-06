@@ -490,7 +490,7 @@ async def payme_endpoint(request: Request, background: BackgroundTasks,
     if isinstance(data, dict):
         request_id = data.get("id")
 
-    if payments.PROVIDER != "payme" or not payments.enabled():
+    if not payments.provider_enabled("payme"):
         return answer(request_id, error=err_auth())
     if not allowed_ip(request.client.host if request.client else None):
         log.warning("Payme: запрос с чужого адреса %s", request.client and request.client.host)
