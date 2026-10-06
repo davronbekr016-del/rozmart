@@ -92,6 +92,11 @@ TEST_USERS = {
     int(x) for x in os.getenv("PAYMENT_TEST_USERS", "").replace(" ", "").split(",") if x
 }
 
+# Пилот на боевых деньгах: способ уже настоящий (боевой ключ), но видят
+# его пока только PAYMENT_TEST_USERS — проверить живую оплату до того, как
+# её увидят все покупатели. PAYMENT_TESTERS_ONLY=1
+TESTERS_ONLY = os.getenv("PAYMENT_TESTERS_ONLY", "0").strip() == "1"
+
 # Через сколько минут неоплаченный заказ отменяется.
 UNPAID_MINUTES = int(os.getenv("UNPAID_ORDER_MINUTES", "30"))
 
@@ -158,9 +163,10 @@ def is_test(provider: str | None = None) -> bool:
 
 def providers_for(telegram_id: int | None) -> list[str]:
     """Какими способами этому человеку можно платить. Тестовый способ —
-    только тестировщикам: иначе любой «оплатит» тестовой картой."""
+    только тестировщикам: иначе любой «оплатит» тестовой картой. В пилоте
+    (PAYMENT_TESTERS_ONLY) — и боевой тоже только им."""
     tester = telegram_id is not None and telegram_id in TEST_USERS
-    return [p for p in active() if tester or not is_test(p)]
+    return [p for p in active() if tester or (not is_test(p) and not TESTERS_ONLY)]
 
 
 def available_for(telegram_id: int | None, provider: str | None = None) -> bool:

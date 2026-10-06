@@ -87,6 +87,7 @@ uvicorn app.main:app --reload
 | `PAYME_MERCHANT_ID` | ID кассы Payme (24 символа, из кабинета Payme Business) |
 | `PAYME_KEY` | Ключ кассы: тестовый — для песочницы, боевой — для денег. Только на сервере |
 | `PAYME_TEST` | `0` — боевой режим. По умолчанию тестовый: песочница Payme и оплата только для `PAYMENT_TEST_USERS` |
+| `PAYMENT_TESTERS_ONLY` | `1` — пилот: способ уже боевой, но видят его только `PAYMENT_TEST_USERS`. Проверить живую оплату до того, как её увидят все |
 | `PAYME_RETURN_URL` | Куда Payme вернёт покупателя после оплаты, например `https://t.me/rozmartuz_bot` |
 | `PAYME_ALLOWED_IPS` | Адреса и подсети Payme через запятую. Задан — запросы с других адресов отвергаются. По документации Payme: `185.234.113.0/28` (185.234.113.1–15) |
 | `PAYME_CHECKOUT_URL` | Страница оплаты, если нужна не стандартная. По умолчанию `checkout.test.paycom.uz` в тесте и `checkout.paycom.uz` в бою |

@@ -135,6 +135,21 @@ check(5, "Второй раз через Payme не оплатить — зак�
 r = client.post(f"/api/orders/{number}/invoice", headers=TESTER)
 check(5, "И кнопки «Оплатить» у оплаченного больше нет", r.status_code == 409)
 
+# ------------------------------------------------------------ пилот на боевых деньгах
+from app import payments  # noqa: E402
+
+payments.PAYME_TEST = False                 # боевой ключ
+opts = client.get("/api/payment-options", headers=STRANGER).json()
+check(6, "Боевой Payme без пилота — виден всем", opts["providers"] == ["payme"])
+payments.TESTERS_ONLY = True
+opts = client.get("/api/payment-options", headers=STRANGER).json()
+check(6, "Пилот: боевой Payme остальным не виден", opts["providers"] == [])
+opts = client.get("/api/payment-options", headers=TESTER).json()
+check(6, "Пилот: тестировщику — виден", "payme" in opts["providers"])
+check(6, "Пилот: не тестировщик заказ картой не оформит",
+      order("prov-key-0010", provider="payme", headers=STRANGER).status_code == 400)
+payments.TESTERS_ONLY, payments.PAYME_TEST = False, True
+
 failed = [r for r in results if not r[2]]
 print(f"\nИтого проверок: {len(results)}, не прошло: {len(failed)}")
 sys.exit(1 if failed else 0)
