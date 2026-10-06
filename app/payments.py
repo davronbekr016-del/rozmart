@@ -50,7 +50,7 @@ from app.telegram import BOT_TOKEN
 
 log = logging.getLogger(__name__)
 
-# Способ оплаты: telegram или payme.
+# Способ оплаты: telegram, payme или paynet.
 PROVIDER = os.getenv("PAYMENT_PROVIDER", "telegram").strip().lower()
 
 # Токен провайдера из BotFather. В репозитории его нет — только на сервере.
@@ -62,6 +62,13 @@ PAYME_KEY = os.getenv("PAYME_KEY", "").strip()
 # Тестовый режим по умолчанию: боевой включается только явным PAYME_TEST=0.
 # Перепутать в эту сторону безопасно, в обратную — нет
 PAYME_TEST = os.getenv("PAYME_TEST", "1").strip() != "0"
+
+# Paynet: логин и пароль, с которыми Paynet ходит к нам (задаём их мы и
+# передаём Paynet), и номер нашего сервиса у Paynet. См. app/paynet.py
+PAYNET_LOGIN = os.getenv("PAYNET_LOGIN", "").strip()
+PAYNET_PASSWORD = os.getenv("PAYNET_PASSWORD", "").strip()
+PAYNET_SERVICE_ID = os.getenv("PAYNET_SERVICE_ID", "").strip()
+PAYNET_TEST = os.getenv("PAYNET_TEST", "1").strip() != "0"
 
 # Секрет вебхука магазинного бота. Без него вебхук отвергает всё, и оплата
 # гарантированно не пройдёт: запрос перед списанием уйдёт в тайм-аут.
@@ -79,7 +86,7 @@ UNPAID_MINUTES = int(os.getenv("UNPAID_ORDER_MINUTES", "30"))
 # Пока окно оплаты открыто, заказ по таймауту не отменяем. Пять минут — с запасом
 # на ввод карты и подтверждение по СМС. У Payme покупатель уходит на другую
 # страницу, иногда в приложение Payme, — там дольше, поэтому запас больше.
-CHECKOUT_GRACE = timedelta(minutes=15 if PROVIDER == "payme" else 5)
+CHECKOUT_GRACE = timedelta(minutes=15 if PROVIDER in ("payme", "paynet") else 5)
 
 CURRENCY = "UZS"
 # У сума в Telegram два знака после запятой (exp=2): суммы передаются в тийинах.
@@ -107,12 +114,16 @@ class PaymentError(Exception):
 def enabled() -> bool:
     if PROVIDER == "payme":
         return bool(PAYME_MERCHANT_ID and PAYME_KEY)
+    if PROVIDER == "paynet":
+        return bool(PAYNET_LOGIN and PAYNET_PASSWORD and PAYNET_SERVICE_ID)
     return bool(TOKEN and SHOP_SECRET)
 
 
 def is_test() -> bool:
     if PROVIDER == "payme":
         return PAYME_TEST
+    if PROVIDER == "paynet":
+        return PAYNET_TEST
     return ":TEST:" in TOKEN
 
 

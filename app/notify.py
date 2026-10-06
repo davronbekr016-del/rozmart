@@ -217,6 +217,7 @@ STAFF_TEXTS = {
         "drop_reason": "💬 Причина: {reason}",
         "courier_off": "↩️ Доставщик {courier} отключён — заказ <b>{number}</b> снова свободен",
         "refund": "↩️ Возврат через Payme по заказу <b>{number}</b> — {total} вернутся покупателю.",
+        "refund_paynet": "↩️ Paynet отменил оплату заказа <b>{number}</b> — {total} вернутся покупателю.",
         "refund_canceled": "Заказ отменён — не собирать и не выдавать.",
         "refund_status": "Статус заказа: {status}.",
         "late": "⚠️ Оплата картой по заказу <b>{number}</b>, а заказ {state}.\n"
@@ -255,6 +256,8 @@ STAFF_TEXTS = {
         "courier_off": "↩️ Yetkazib beruvchi {courier} o'chirildi — <b>{number}</b> buyurtma yana bo'sh",
         "refund": "↩️ <b>{number}</b> buyurtma bo'yicha Payme orqali qaytarish — {total} "
                   "xaridorga qaytariladi.",
+        "refund_paynet": "↩️ Paynet <b>{number}</b> buyurtma to'lovini bekor qildi — {total} "
+                         "xaridorga qaytariladi.",
         "refund_canceled": "Buyurtma bekor qilindi — yig'ilmasin va berilmasin.",
         "refund_status": "Buyurtma holati: {status}.",
         "late": "⚠️ <b>{number}</b> buyurtma uchun karta orqali to'lov keldi, lekin buyurtma {state}.\n"

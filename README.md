@@ -78,7 +78,12 @@ uvicorn app.main:app --reload
 | `UNPAID_ORDER_MINUTES` | Через сколько минут отменяется заказ, не оплаченный картой. По умолчанию 30 |
 | `COURIER_BOT_TOKEN` | Токен бота доставщиков. Пусто — бот выключен. Только на сервере |
 | `COURIER_WEBHOOK_SECRET` | Секрет вебхука бота доставщиков |
-| `PAYMENT_PROVIDER` | Способ оплаты картой: `telegram` (по умолчанию, Telegram Payments) или `payme` (Merchant API Payme) |
+| `PAYMENT_PROVIDER` | Способ оплаты картой: `telegram` (по умолчанию, Telegram Payments), `payme` (Merchant API Payme) или `paynet` |
+| `PAYNET_LOGIN`, `PAYNET_PASSWORD` | Логин и пароль, с которыми Paynet обращается к `/paynet`. Задаём сами, передаём Paynet |
+| `PAYNET_SERVICE_ID` | Номер сервиса ROZMART у Paynet |
+| `PAYNET_FIELD` | Имя поля с номером заказа в запросах Paynet. По умолчанию `order_id` |
+| `PAYNET_PAY_URL` | Ссылка на оплату сервиса в Paynet, если Paynet её даст: `{service}`, `{order}`, `{amount}` |
+| `PAYNET_TEST` | `0` — боевой режим. По умолчанию тестовый: оплата только у `PAYMENT_TEST_USERS` |
 | `PAYME_MERCHANT_ID` | ID кассы Payme (24 символа, из кабинета Payme Business) |
 | `PAYME_KEY` | Ключ кассы: тестовый — для песочницы, боевой — для денег. Только на сервере |
 | `PAYME_TEST` | `0` — боевой режим. По умолчанию тестовый: песочница Payme и оплата только для `PAYMENT_TEST_USERS` |
@@ -584,6 +589,30 @@ python -m scripts.setup_payments --check   пробный счёт — пров�
 
 Проверки — `tests/payme_scenarios.py`, 52 проверки: те же случаи, что гоняет
 песочница Payme.
+
+### Paynet
+
+Третий способ, `PAYMENT_PROVIDER=paynet`, — «универсальный WEB-сервис
+поставщика услуг» Paynet (`app/paynet.py`, адрес `POST /paynet`, JSON-RPC 2.0).
+Страницы оплаты у Paynet нет: покупатель платит в самом Paynet — выбирает
+сервис ROZMART и вводит номер заказа (цифрами: «8047», можно и «RB-8047»).
+Приложение после «Оплатить» показывает, что ввести, даёт скопировать номер,
+а если Paynet даст ссылку на сервис (`PAYNET_PAY_URL`) — открывает её.
+
+| Метод | Что делаем |
+|---|---|
+| `GetInformation` | Заказ ждёт оплаты — сумма в тийинах и имя («Javohir R.», не целиком). Иначе 302. Покупатель в Paynet — автоотмена ждёт |
+| `PerformTransaction` | Сумма та же — заказ оплачен, сотрудникам и в REGOS. Не та — 413, повтор номера — 201. Неудачные попытки не записываются: Paynet повторяет их с тем же номером |
+| `CheckTransaction` | 1 проведён, 2 отменён, 3 не найден |
+| `CancelTransaction` | Возврат: заказ отменяется у нас и в REGOS, сотрудникам и доставщику — сообщение. Повтор — 202, неизвестная — 203 |
+| `GetStatement` | Проведённые за период (отменённые не входят) |
+
+Доступ — Basic с логином и паролем, которые задаём мы (`PAYNET_LOGIN`,
+`PAYNET_PASSWORD`) и передаём Paynet; неверные — HTTP 401, как требует
+спецификация. Номер сервиса у Paynet — `PAYNET_SERVICE_ID`. Время — по Ташкенту,
+«ГГГГ-ММ-ДД чч:мм:сс». На тестер Paynet, который работает в браузере, адрес
+отвечает с CORS. Проверки — `tests/paynet_scenarios.py`, 37: двенадцать
+сценариев тестера Paynet и сверх того.
 
 ## Служебный бот
 

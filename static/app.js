@@ -90,6 +90,11 @@ const I18N = {
     late_s: "Магазин свяжется с вами, чтобы вернуть деньги или восстановить заказ.",
     external_t: "Оплатите на странице Payme",
     external_s: "Когда оплатите, вернитесь сюда — статус обновится сам.",
+    paynet_t: "Оплатите в Paynet",
+    paynet_s: "Откройте приложение Paynet, найдите <b>ROZMART</b> и введите номер заказа "
+      + "{order}. Сумма — {sum}.<br>Когда оплатите, вернитесь сюда — статус обновится сам.",
+    copy_number: "Скопировать номер заказа", copied: "Номер заказа скопирован",
+    open_paynet: "Открыть Paynet",
     sum_paid: "Оплачено", sum_due: "К оплате", sum_courier: "Оплата курьеру",
     pay: "Оплатить", i_paid: "Я оплатил — проверить", payme_again: "Открыть Payme ещё раз",
     order_number: "Номер заказа",
@@ -180,6 +185,11 @@ const I18N = {
     late_s: "Do'kon pulni qaytarish yoki buyurtmani tiklash uchun siz bilan bog'lanadi.",
     external_t: "Payme sahifasida to'lang",
     external_s: "To'lagandan so'ng shu yerga qayting — holat o'zi yangilanadi.",
+    paynet_t: "Paynet'da to'lang",
+    paynet_s: "Paynet ilovasini oching, <b>ROZMART</b>ni toping va buyurtma raqamini kiriting: "
+      + "{order}. Summa — {sum}.<br>To'lagandan so'ng shu yerga qayting — holat o'zi yangilanadi.",
+    copy_number: "Buyurtma raqamini nusxalash", copied: "Buyurtma raqami nusxalandi",
+    open_paynet: "Paynet'ni ochish",
     sum_paid: "To'landi", sum_due: "To'lanadi", sum_courier: "Kuryerga to'lov",
     pay: "To'lash", i_paid: "To'ladim — tekshirish", payme_again: "Payme'ni qayta ochish",
     order_number: "Buyurtma raqami",
@@ -881,6 +891,11 @@ function renderDone(order, mode) {
     late: ["ti-alert-triangle", t("late_t"), t("late_s")],
     external: ["ti-external-link", t("external_t"),
       `${t("external_s")}<br>${esc(payUntilText(order))}`],
+    paynet: ["ti-wallet", t("paynet_t"),
+      `${t("paynet_s", {
+        order: `<b>${esc((state.paynet && state.paynet.order) || order.number)}</b>`,
+        sum: `<b>${money((state.paynet && state.paynet.amount) || order.total)}</b>`,
+      })}<br>${esc(payUntilText(order))}`],
   }[mode];
   const spin = mode === "checking" ? "animation:spin 1s linear infinite;" : "";
   const sumLabel = mode === "paid" ? t("sum_paid") : (card ? t("sum_due") : t("sum_courier"));
@@ -894,6 +909,13 @@ function renderDone(order, mode) {
     </div>
     ${mode === "awaiting" ? `<button class="btn" data-pay="${esc(order.number)}" style="margin-bottom:14px">
       ${t("pay")}${order.total ? " " + money(order.total) : ""}</button>` : ""}
+    ${mode === "paynet" ? `${state.paynet && state.paynet.link
+        ? `<button class="btn" data-pay="${esc(order.number)}" style="margin-bottom:10px">
+            ${t("open_paynet")}</button>` : ""}
+      <button class="btn" data-copy="${esc((state.paynet && state.paynet.order) || order.number)}"
+        style="margin-bottom:10px;background:#F2F2F2;color:#1A1A1A">${t("copy_number")}</button>
+      <button class="btn" data-check-pay="${esc(order.number)}" style="margin-bottom:14px">
+        ${t("i_paid")}</button>` : ""}
     ${mode === "external" ? `<button class="btn" data-check-pay="${esc(order.number)}" style="margin-bottom:10px">
       ${t("i_paid")}</button>
       <button class="btn" data-pay="${esc(order.number)}" style="margin-bottom:14px;background:#F2F2F2;color:#1A1A1A">
@@ -1753,11 +1775,16 @@ async function payOrder(number) {
   if (state.paying) return;          // двойное нажатие открыло бы два окна
   state.paying = true;
   try {
-    const { link, kind } = await api(`/api/orders/${encodeURIComponent(number)}/invoice`,
+    const invoice = await api(`/api/orders/${encodeURIComponent(number)}/invoice`,
       { method: "POST" });
+    const { link, kind } = invoice;
     if (kind === "payme") {
       state.paying = false;
       return openPayme(tg, number, link);
+    }
+    if (kind === "paynet") {
+      state.paying = false;
+      return openPaynet(tg, number, invoice);
     }
     if (!tg.openInvoice) {
       state.paying = false;
@@ -1779,6 +1806,38 @@ async function payOrder(number) {
  * у сервера: Payme сообщает об оплате ему. Поэтому, когда приложение снова
  * на экране, спрашиваем сервер несколько раз подряд — подтверждение приходит
  * через секунду-другую после оплаты. */
+/* Paynet. Страницы оплаты нет: покупатель платит в самом Paynet по номеру
+ * заказа. Показываем, что ввести, даём скопировать номер; если Paynet дал
+ * ссылку на оплату сервиса — открываем её. Об оплате Paynet сообщает
+ * серверу, и, когда приложение снова на экране, мы спрашиваем сервер —
+ * так же, как после Payme. */
+function openPaynet(tg, number, info) {
+  state.payingExternal = number;
+  state.paynet = { order: info.order, amount: info.amount, link: info.link };
+  if (info.link) {
+    if (tg.openLink) tg.openLink(info.link); else window.open(info.link, "_blank");
+  }
+  const order = (state.orders || []).find((o) => o.number === number);
+  renderDone(order || orderStub(number), "paynet");
+  show("done");
+}
+
+/** Номер заказа — в буфер обмена: вводить его в Paynet проще вставкой. */
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (error) {
+    // старый WebView без доступа к буферу: выделяем вручную
+    const field = document.createElement("textarea");
+    field.value = text;
+    document.body.appendChild(field);
+    field.select();
+    try { document.execCommand("copy"); } catch (e) { console.error(e); }
+    field.remove();
+  }
+  note(t("copied"));
+}
+
 function openPayme(tg, number, link) {
   state.payingExternal = number;
   if (tg.openLink) tg.openLink(link); else window.open(link, "_blank");
@@ -1986,6 +2045,9 @@ document.addEventListener("click", (event) => {
 
   const payButton = event.target.closest("[data-pay]");
   if (payButton) return payOrder(payButton.dataset.pay);
+
+  const copyButton = event.target.closest("[data-copy]");
+  if (copyButton) return copyText(copyButton.dataset.copy);
 
   const checkPayButton = event.target.closest("[data-check-pay]");
   if (checkPayButton) return checkExternalPayment(checkPayButton.dataset.checkPay, true);

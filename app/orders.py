@@ -310,6 +310,14 @@ def order_invoice(
         raise HTTPException(status_code=409, detail="Заказ отменён — оплатить его нельзя")
     if not payments.available_for(user.id):
         raise HTTPException(status_code=409, detail="Оплата картой сейчас недоступна")
+    if payments.PROVIDER == "paynet":
+        # страницы оплаты у Paynet нет: покупатель платит в самом Paynet по
+        # номеру заказа. Ссылка — если Paynet даст адрес оплаты сервиса
+        from app import paynet
+        digits = order.number.removeprefix(paynet.ORDER_PREFIX)
+        link = paynet.PAY_URL.format(service=payments.PAYNET_SERVICE_ID, order=digits,
+                                     amount=order.total) if paynet.PAY_URL else None
+        return {"kind": "paynet", "link": link, "order": digits, "amount": order.total}
     if payments.PROVIDER == "payme":
         from app import payme
         from app import i18n

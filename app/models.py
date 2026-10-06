@@ -287,6 +287,30 @@ class OrderItem(Base):
     variant: Mapped["Variant"] = relationship()
 
 
+class PaynetTransaction(Base):
+    """Платёж через Paynet (app/paynet.py).
+
+    У Paynet платёж проводится одним вызовом — PerformTransaction, без
+    «создать, потом провести», как у Payme. Состояния — по протоколу Paynet:
+    1 проведён, 2 отменён. Неудачные попытки (не тот заказ, не та сумма)
+    не записываются: Paynet повторяет их с тем же номером транзакции,
+    и повтор должен пройти.
+    """
+
+    __tablename__ = "paynet_transactions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)        # наш providerTrnId
+    # номер транзакции у Paynet: 11–20 цифр, храним строкой
+    paynet_id: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    order_id: Mapped[int | None] = mapped_column(
+        ForeignKey("orders.id", ondelete="SET NULL"), index=True)
+    order_number: Mapped[str] = mapped_column(String(20))
+    amount: Mapped[int] = mapped_column(BigInteger)          # в тийинах
+    state: Mapped[int]
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    canceled_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
 class PaymeTransaction(Base):
     """Транзакция Payme (Merchant API).
 
