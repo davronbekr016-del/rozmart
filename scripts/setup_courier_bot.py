@@ -11,8 +11,35 @@ import sys
 
 from app import courier_bot
 
-DESCRIPTION = ("Бот доставщиков ROZMART: свободные заказы, их приём и доставка. "
-               "Доступ включает администратор магазина.")
+# Описание — то, что человек видит в пустом чате до «Старт» (до 512 знаков);
+# короткое — в профиле бота и в пересланной ссылке (до 120). Telegram
+# показывает вариант на языке приложения человека, "" — для всех остальных
+DESCRIPTIONS = {
+    "": (
+        "🚚 Бот доставщиков ROZMART\n\n"
+        "📦 Заказы — свободные заказы магазина. Нажмите «Принять заказ» — он ваш, "
+        "другие доставщики его уже не возьмут.\n\n"
+        "🚚 Доставка — ваши заказы в пути: телефон покупателя, адрес на карте, "
+        "кнопка «Завершить», когда заказ вручён, или «Отменить», чтобы вернуть его другим.\n\n"
+        "В каждом заказе — сколько получить с покупателя или пометка «оплачено картой», "
+        "адрес и состав.\n\n"
+        "Бот только для сотрудников. Нажмите «Старт» — доступ включит администратор магазина.",
+        "Заказы ROZMART для доставщиков: принять, отвезти, отметить доставку. "
+        "Доступ даёт администратор.",
+    ),
+    "uz": (
+        "🚚 ROZMART yetkazib beruvchilar boti\n\n"
+        "📦 Заказы — do'konning bo'sh buyurtmalari. «Принять заказ»ni bosing — buyurtma "
+        "sizniki, boshqalar uni endi ololmaydi.\n\n"
+        "🚚 Доставка — yo'ldagi buyurtmalaringiz: xaridor telefoni, xaritadagi manzil, "
+        "buyurtma topshirilganda «Завершить», boshqalarga qaytarish uchun «Отменить».\n\n"
+        "Har bir buyurtmada — xaridordan olinadigan summa yoki «karta orqali to'langan» "
+        "belgisi, manzil va tarkib.\n\n"
+        "Bot faqat xodimlar uchun. «Start»ni bosing — ruxsatni do'kon administratori beradi.",
+        "ROZMART buyurtmalari yetkazib beruvchilar uchun: qabul qilish, yetkazish, "
+        "belgilash. Ruxsat — administratorda.",
+    ),
+}
 
 
 def show() -> int:
@@ -53,7 +80,12 @@ def main() -> int:
         {"command": "orders", "description": "Свободные заказы"},
         {"command": "delivery", "description": "Мои заказы в доставке"},
     ]})
-    courier_bot.call("setMyDescription", {"description": DESCRIPTION})
+    for language, (description, short) in DESCRIPTIONS.items():
+        assert len(description) <= 512 and len(short) <= 120, language
+        courier_bot.call("setMyDescription", {"description": description,
+                                              "language_code": language})
+        courier_bot.call("setMyShortDescription", {"short_description": short,
+                                                   "language_code": language})
     print(f"Вебхук бота доставщиков: {public + courier_bot.WEBHOOK_PATH}")
     return show()
 
