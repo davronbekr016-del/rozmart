@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.exception_handlers import http_exception_handler
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -64,6 +66,19 @@ app = FastAPI(
 )
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR, check_dir=False), name="static")
+
+
+@app.exception_handler(StarletteHTTPException)
+async def localized_http_exception(request: Request, exc: StarletteHTTPException):
+    """Ошибка для покупателя — на языке приложения (заголовок X-Lang).
+    Сервер пишет их по-русски, узбекские варианты — в app/i18n.py."""
+    from app import i18n
+
+    lang = i18n.lang_of(request.headers.get("X-Lang"))
+    if lang != "ru" and isinstance(exc.detail, str):
+        exc = StarletteHTTPException(exc.status_code, i18n.translate(exc.detail, lang),
+                                     headers=getattr(exc, "headers", None))
+    return await http_exception_handler(request, exc)
 
 app.include_router(admin_router)
 app.include_router(bot_router)

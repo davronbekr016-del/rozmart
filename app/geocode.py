@@ -27,7 +27,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Header, Query
 
 log = logging.getLogger(__name__)
 
@@ -92,11 +92,12 @@ def compose(address: dict) -> dict:
 EMPTY = {"address": None, "house": None}
 
 
-def lookup(lat: float, lon: float) -> dict:
-    """Адрес по координатам. Пустые поля — не нашлось или геокодер недоступен."""
+def lookup(lat: float, lon: float, lang: str = "ru") -> dict:
+    """Адрес по координатам — на языке покупателя. Пустые поля — не нашлось
+    или геокодер недоступен."""
     global _last_call, _blocked_until
 
-    key = _key(lat, lon)
+    key = (_key(lat, lon), lang)
     if key in _cache:
         return _cache[key]
 
@@ -114,7 +115,8 @@ def lookup(lat: float, lon: float) -> dict:
             "lat": f"{lat:.6f}",
             "lon": f"{lon:.6f}",
             "format": "jsonv2",
-            "accept-language": "ru",
+            # где у улицы нет узбекского названия, геокодер даст русское
+            "accept-language": "uz,ru" if lang == "uz" else "ru",
             # 18 — «дом»: без этого приходит район целиком
             "zoom": 18,
         })
@@ -146,6 +148,8 @@ def lookup(lat: float, lon: float) -> dict:
 def geocode(
     lat: float = Query(ge=-90, le=90),
     lon: float = Query(ge=-180, le=180),
+    x_lang: str | None = Header(default=None, alias="X-Lang"),
 ):
     """Адрес по точке. Пустой ответ — обычное дело, поле останется за человеком."""
-    return lookup(lat, lon)
+    from app import i18n
+    return lookup(lat, lon, i18n.lang_of(x_lang))

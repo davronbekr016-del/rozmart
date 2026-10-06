@@ -41,9 +41,259 @@ const SLOTS = [
   ["Завтра утром", "09:00 – 12:00"],
 ];
 const PAYMENTS = [
-  ["cash", "Наличными курьеру", "ti-cash"],
-  ["online", "Онлайн картой", "ti-credit-card"],
+  ["cash", "pay_cash", "ti-cash"],
+  ["online", "pay_online", "ti-credit-card"],
 ];
+
+// ---------- язык ----------
+
+/* Два языка: русский и узбекский (латиницей, как в узбекском Telegram).
+ * Выбирается сам по языку Telegram покупателя, поменять можно в профиле —
+ * выбор запоминается на телефоне. Названия товаров, категорий, адреса
+ * приходят из базы и не переводятся. Тексты ошибок сервер присылает на том
+ * языке, который мы ему называем в заголовке X-Lang. */
+const LANG_KEY = "rozmart.lang";
+const I18N = {
+  ru: {
+    all_goods: "Все товары", all_chip: "Все", no_goods: "Товаров нет", found: "Найдено",
+    nothing_found: "Ничего не нашлось. Попробуйте другое слово.",
+    catalog_fail: "Не удалось загрузить каталог. Проверьте подключение к интернету.",
+    category_fail: "Не удалось загрузить товары категории.",
+    product_fail: "Не удалось открыть товар.",
+    packaging: "Фасовка", category: "Категория", composition: "Состав",
+    shelf_life: "Срок годности", quantity: "Количество", description: "Описание",
+    to_cart: "В корзину",
+    cart_gone: "Часть товаров больше не продаётся — мы убрали их из корзины.",
+    prices_updated: "Цены обновились.", cart_empty: "Корзина пуста",
+    cart_hint: "Состав можно менять до оформления заказа",
+    goods_n: "Товары ({n})", goods: "Товары", delivery: "Доставка", total: "Итого",
+    pay_cash: "Наличными курьеру", pay_online: "Онлайн картой",
+    confirm_order: "Подтвердить заказ",
+    fill_fields: "Заполните имя, номер телефона в формате +998 XX XXX XX XX и адрес доставки.",
+    need_consent: "Отметьте согласие на обработку данных.",
+    sending: "Отправляем…",
+    prices_changed: "Цены изменились. Проверьте корзину и подтвердите заказ заново.",
+    relaunch: "Закройте и откройте приложение заново, вход в Telegram устарел.",
+    order_failed: "Не удалось оформить заказ. Проверьте данные и попробуйте ещё раз.",
+    order_sent: "Заказ отправлен. Найдите его в «Моих заказах».",
+    send_failed: "Не удалось отправить заказ. Проверьте связь и попробуйте ещё раз.",
+    cash_t: "Заказ принят", cash_s: "Мы уже собираем ваш заказ.<br>Курьер свяжется перед доставкой.",
+    paid_t: "Оплачено, заказ принят",
+    paid_s: "Деньги получены, магазин начал сборку.<br>Курьеру платить не нужно.",
+    awaiting_t: "Заказ ждёт оплаты",
+    awaiting_s: "Оплатите картой — после этого магазин начнёт сборку.",
+    checking_t: "Проверяем оплату…", checking_s: "Это займёт несколько секунд.",
+    slow_t: "Оплата проверяется",
+    slow_s: "Как только банк подтвердит платёж, статус обновится в «Моих заказах».",
+    expired_t: "Заказ отменён", expired_s: "Время на оплату вышло. Оформите заказ заново.",
+    late_t: "Заказ отменён, а оплата прошла",
+    late_s: "Магазин свяжется с вами, чтобы вернуть деньги или восстановить заказ.",
+    external_t: "Оплатите на странице Payme",
+    external_s: "Когда оплатите, вернитесь сюда — статус обновится сам.",
+    sum_paid: "Оплачено", sum_due: "К оплате", sum_courier: "Оплата курьеру",
+    pay: "Оплатить", i_paid: "Я оплатил — проверить", payme_again: "Открыть Payme ещё раз",
+    order_number: "Номер заказа",
+    forget_q: "Удалить имя, телефон и адрес? Уже оформленные заказы останутся.",
+    forget_fail: "Не удалось удалить. Проверьте связь.",
+    house_n: "дом {n}", set_address: "Укажите адрес", deliver_time: "Доставим за 60–90 минут",
+    addr_hint: "Чтобы не набирать при заказе",
+    save: "Сохранить", saving: "Сохраняем…",
+    save_fail: "Не удалось сохранить. Проверьте данные и связь.",
+    loading: "Загружаем…", no_orders: "Вы ещё ничего не заказывали",
+    orders_fail: "Не удалось загрузить заказы.", more: "подробнее ›",
+    order_n: "Заказ {n}",
+    pm_cash: "наличными курьеру", pm_paid: "картой — оплачено",
+    pm_unpaid: "картой — не оплачен", pm_waiting: "картой — ждёт оплаты",
+    order_items: "Состав заказа", where: "Куда", phone: "Телефон", time: "Время",
+    payment: "Оплата", comment: "Комментарий",
+    pay_until: "Без оплаты заказ отменится в {t}.",
+    map_fail: "Карта не загрузилась. Проверьте связь или напишите адрес словами.",
+    geo_settings: "Доступ к геопозиции для приложения выключен. Открыть настройки?",
+    geo_fail: "Не удалось определить местоположение. Найдите дом на карте руками.",
+    geo_phone: "Телефон не дал определить местоположение. Найдите дом на карте руками.",
+    geo_denied: "Доступ к геопозиции запрещён. Разрешите его в настройках телефона "
+      + "или найдите дом на карте руками.",
+    addr_lookup: "Определяем адрес…",
+    addr_unknown: "Адрес не определился — напишите его словами",
+    map_hint: "Подвиньте карту так, чтобы булавка встала на ваш дом.",
+    addr_house: "{a}, дом {h}",
+    point_ok: "Адрес и дом взяты с карты", point_change: "изменить точку", point_drop: "убрать",
+    tg_only: "Оплатить картой можно только в приложении Telegram.",
+    tg_update: "Обновите Telegram, чтобы оплатить картой.",
+    pay_open_fail: "Не удалось открыть оплату. Попробуйте ещё раз.",
+    not_yet: "Оплата ещё не поступила. Если вы уже оплатили — подождите минуту.",
+    pay_failed: "Оплата не прошла. Можно попробовать ещё раз.",
+    admin_panel: "Панель",
+    // разметка index.html
+    search_ph: "Поиск по каталогу", product_details: "Детали товара", cart: "Корзина",
+    to_checkout: "Оформить заказ", checkout: "Оформление заказа", your_name: "Ваше имя",
+    name_ph: "Как к вам обращаться", phone_l: "Номер телефона", addr_l: "Адрес доставки",
+    addr_ph: "Район, улица, дом, квартира", on_map: "Указать на карте", house: "Дом",
+    entrance: "Подъезд", flat: "Квартира", comment_l: "Комментарий к заказу",
+    comment_ph: "Например: позвонить за 10 минут", delivery_time: "Время доставки",
+    pay_method: "Способ оплаты",
+    consent: "Согласен на обработку моих данных — имени, телефона и адреса — для доставки заказа",
+    profile: "Профиль", name: "Имя",
+    profile_note: "Эти данные подставятся в следующий заказ. Уже оформленные не меняются.",
+    forget: "Удалить мои данные", my_orders: "Мои заказы", back_catalog: "Вернуться в каталог",
+    order: "Заказ", map_title: "Точка на карте", satellite: "Спутник", scheme: "Схема",
+    my_location: "Моё местоположение", done_btn: "Готово", tab_catalog: "Каталог",
+    tab_orders: "Заказы", language: "Язык",
+  },
+  uz: {
+    all_goods: "Barcha mahsulotlar", all_chip: "Barchasi", no_goods: "Mahsulotlar yo'q",
+    found: "Topildi",
+    nothing_found: "Hech narsa topilmadi. Boshqa so'z bilan urinib ko'ring.",
+    catalog_fail: "Katalogni yuklab bo'lmadi. Internet aloqasini tekshiring.",
+    category_fail: "Kategoriya mahsulotlarini yuklab bo'lmadi.",
+    product_fail: "Mahsulotni ochib bo'lmadi.",
+    packaging: "Qadoq", category: "Kategoriya", composition: "Tarkibi",
+    shelf_life: "Yaroqlilik muddati", quantity: "Miqdori", description: "Tavsif",
+    to_cart: "Savatga",
+    cart_gone: "Ba'zi mahsulotlar endi sotilmaydi — ularni savatdan olib tashladik.",
+    prices_updated: "Narxlar yangilandi.", cart_empty: "Savat bo'sh",
+    cart_hint: "Buyurtma berilgunga qadar tarkibini o'zgartirish mumkin",
+    goods_n: "Mahsulotlar ({n})", goods: "Mahsulotlar", delivery: "Yetkazib berish", total: "Jami",
+    pay_cash: "Kuryerga naqd pul", pay_online: "Karta orqali onlayn",
+    confirm_order: "Buyurtmani tasdiqlash",
+    fill_fields: "Ism, +998 XX XXX XX XX formatidagi telefon raqami va yetkazib berish "
+      + "manzilini kiriting.",
+    need_consent: "Ma'lumotlarni qayta ishlashga roziligingizni belgilang.",
+    sending: "Yuborilmoqda…",
+    prices_changed: "Narxlar o'zgardi. Savatni tekshirib, buyurtmani qayta tasdiqlang.",
+    relaunch: "Ilovani yopib, qayta oching — Telegram orqali kirish eskirgan.",
+    order_failed: "Buyurtma berib bo'lmadi. Ma'lumotlarni tekshirib, qayta urinib ko'ring.",
+    order_sent: "Buyurtma yuborildi. Uni «Buyurtmalarim» bo'limida toping.",
+    send_failed: "Buyurtmani yuborib bo'lmadi. Aloqani tekshirib, qayta urinib ko'ring.",
+    cash_t: "Buyurtma qabul qilindi",
+    cash_s: "Buyurtmangizni yig'ishni boshladik.<br>Kuryer yetkazishdan oldin bog'lanadi.",
+    paid_t: "To'landi, buyurtma qabul qilindi",
+    paid_s: "Pul qabul qilindi, do'kon yig'ishni boshladi.<br>Kuryerga to'lash shart emas.",
+    awaiting_t: "Buyurtma to'lovni kutmoqda",
+    awaiting_s: "Karta orqali to'lang — shundan so'ng do'kon yig'ishni boshlaydi.",
+    checking_t: "To'lov tekshirilmoqda…", checking_s: "Bu bir necha soniya oladi.",
+    slow_t: "To'lov tekshirilmoqda",
+    slow_s: "Bank to'lovni tasdiqlashi bilan «Buyurtmalarim» bo'limida holat yangilanadi.",
+    expired_t: "Buyurtma bekor qilindi",
+    expired_s: "To'lov vaqti tugadi. Buyurtmani qaytadan bering.",
+    late_t: "Buyurtma bekor qilingan, lekin to'lov o'tdi",
+    late_s: "Do'kon pulni qaytarish yoki buyurtmani tiklash uchun siz bilan bog'lanadi.",
+    external_t: "Payme sahifasida to'lang",
+    external_s: "To'lagandan so'ng shu yerga qayting — holat o'zi yangilanadi.",
+    sum_paid: "To'landi", sum_due: "To'lanadi", sum_courier: "Kuryerga to'lov",
+    pay: "To'lash", i_paid: "To'ladim — tekshirish", payme_again: "Payme'ni qayta ochish",
+    order_number: "Buyurtma raqami",
+    forget_q: "Ism, telefon va manzil o'chirilsinmi? Berilgan buyurtmalar saqlanib qoladi.",
+    forget_fail: "O'chirib bo'lmadi. Aloqani tekshiring.",
+    house_n: "{n}-uy", set_address: "Manzilni kiriting",
+    deliver_time: "60–90 daqiqada yetkazamiz",
+    addr_hint: "Buyurtmada qayta yozmaslik uchun",
+    save: "Saqlash", saving: "Saqlanmoqda…",
+    save_fail: "Saqlab bo'lmadi. Ma'lumotlar va aloqani tekshiring.",
+    loading: "Yuklanmoqda…", no_orders: "Siz hali hech narsa buyurtma qilmagansiz",
+    orders_fail: "Buyurtmalarni yuklab bo'lmadi.", more: "batafsil ›",
+    order_n: "Buyurtma {n}",
+    pm_cash: "kuryerga naqd pul", pm_paid: "karta orqali — to'langan",
+    pm_unpaid: "karta orqali — to'lanmagan", pm_waiting: "karta orqali — to'lov kutilmoqda",
+    order_items: "Buyurtma tarkibi", where: "Manzil", phone: "Telefon", time: "Vaqt",
+    payment: "To'lov", comment: "Izoh",
+    pay_until: "To'lanmasa, buyurtma soat {t} da bekor qilinadi.",
+    map_fail: "Xarita yuklanmadi. Aloqani tekshiring yoki manzilni so'z bilan yozing.",
+    geo_settings: "Ilova uchun geolokatsiyaga ruxsat o'chirilgan. Sozlamalarni ochaymi?",
+    geo_fail: "Joylashuvni aniqlab bo'lmadi. Uyingizni xaritada o'zingiz toping.",
+    geo_phone: "Telefon joylashuvni aniqlashga ruxsat bermadi. Uyingizni xaritada o'zingiz toping.",
+    geo_denied: "Geolokatsiyaga ruxsat berilmagan. Telefon sozlamalarida ruxsat bering "
+      + "yoki uyingizni xaritada o'zingiz toping.",
+    addr_lookup: "Manzil aniqlanmoqda…",
+    addr_unknown: "Manzil aniqlanmadi — uni so'z bilan yozing",
+    map_hint: "Xaritani surib, belgini uyingiz ustiga qo'ying.",
+    addr_house: "{a}, {h}-uy",
+    point_ok: "Manzil va uy xaritadan olindi", point_change: "nuqtani o'zgartirish",
+    point_drop: "olib tashlash",
+    tg_only: "Karta orqali faqat Telegram ilovasida to'lash mumkin.",
+    tg_update: "Karta orqali to'lash uchun Telegram'ni yangilang.",
+    pay_open_fail: "To'lovni ochib bo'lmadi. Qayta urinib ko'ring.",
+    not_yet: "To'lov hali tushmadi. Agar to'lagan bo'lsangiz — bir daqiqa kuting.",
+    pay_failed: "To'lov o'tmadi. Qayta urinib ko'rishingiz mumkin.",
+    admin_panel: "Panel",
+    search_ph: "Katalog bo'yicha qidiruv", product_details: "Mahsulot haqida", cart: "Savat",
+    to_checkout: "Buyurtma berish", checkout: "Buyurtmani rasmiylashtirish", your_name: "Ismingiz",
+    name_ph: "Sizga qanday murojaat qilaylik", phone_l: "Telefon raqami",
+    addr_l: "Yetkazib berish manzili", addr_ph: "Tuman, ko'cha, uy, xonadon",
+    on_map: "Xaritada ko'rsatish", house: "Uy", entrance: "Podyezd", flat: "Xonadon",
+    comment_l: "Buyurtmaga izoh", comment_ph: "Masalan: 10 daqiqa oldin qo'ng'iroq qiling",
+    delivery_time: "Yetkazib berish vaqti", pay_method: "To'lov usuli",
+    consent: "Buyurtmani yetkazib berish uchun ma'lumotlarim — ism, telefon va manzil — "
+      + "qayta ishlanishiga roziman",
+    profile: "Profil", name: "Ism",
+    profile_note: "Bu ma'lumotlar keyingi buyurtmaga qo'yiladi. Berilgan buyurtmalar o'zgarmaydi.",
+    forget: "Ma'lumotlarimni o'chirish", my_orders: "Buyurtmalarim",
+    back_catalog: "Katalogga qaytish", order: "Buyurtma", map_title: "Xaritadagi nuqta",
+    satellite: "Sun'iy yo'ldosh", scheme: "Sxema", my_location: "Mening joylashuvim",
+    done_btn: "Tayyor", tab_catalog: "Katalog", tab_orders: "Buyurtmalar", language: "Til",
+  },
+};
+
+// Значения срока доставки уходят на сервер по-русски — переводим только подпись
+const SLOT_TEXT = {
+  uz: { "Как можно скорее": "Imkon qadar tezroq", "Сегодня вечером": "Bugun kechqurun",
+        "Завтра утром": "Ertaga ertalab", "60–90 минут": "60–90 daqiqa" },
+};
+// Состояния заказа: сервер присылает код, название берём своё
+const STATUS_TEXT = {
+  ru: { NEW: "Ждёт оплаты", CONFIRMED: "Принят", ASSEMBLING: "Собирается",
+        DELIVERING: "В доставке", DONE: "Выполнен", CANCELED: "Отменён" },
+  uz: { NEW: "To'lov kutilmoqda", CONFIRMED: "Qabul qilindi", ASSEMBLING: "Yig'ilmoqda",
+        DELIVERING: "Yetkazilmoqda", DONE: "Bajarildi", CANCELED: "Bekor qilindi" },
+};
+
+function detectLang() {
+  try {
+    const saved = localStorage.getItem(LANG_KEY);
+    if (saved === "ru" || saved === "uz") return saved;
+  } catch (error) {
+    console.error(error);   // приватный режим — определим по Telegram
+  }
+  const user = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe
+    && window.Telegram.WebApp.initDataUnsafe.user;
+  return user && /^uz/i.test(user.language_code || "") ? "uz" : "ru";
+}
+
+let LANG = detectLang();
+
+function t(key, vars = {}) {
+  const text = (I18N[LANG] && I18N[LANG][key]) || I18N.ru[key] || key;
+  return text.replace(/\{(\w+)\}/g, (_, name) => (name in vars ? vars[name] : ""));
+}
+
+const slotText = (value) => (SLOT_TEXT[LANG] && SLOT_TEXT[LANG][value]) || value;
+const statusText = (order) => STATUS_TEXT[LANG][order.status] || order.status_text;
+const locale = () => (LANG === "uz" ? "uz-UZ" : "ru-RU");
+
+/** «3 товара» / «3 ta mahsulot»: в узбекском множественного числа после
+ *  числительного нет. kind — "goods" или "positions". */
+function countText(n, kind = "goods") {
+  if (LANG === "uz") return `${n} ta ${kind === "goods" ? "mahsulot" : "pozitsiya"}`;
+  return `${n} ${kind === "goods" ? plural(n) : plural(n, "позиция", "позиции", "позиций")}`;
+}
+
+/** Тексты разметки: data-i18n — текст, data-i18n-ph — подсказка в поле,
+ *  data-i18n-title — всплывающая подпись. */
+function applyStatic() {
+  document.documentElement.lang = LANG;
+  document.querySelectorAll("[data-i18n]").forEach((node) => {
+    node.textContent = t(node.dataset.i18n);
+  });
+  document.querySelectorAll("[data-i18n-ph]").forEach((node) => {
+    node.placeholder = t(node.dataset.i18nPh);
+  });
+  document.querySelectorAll("[data-i18n-title]").forEach((node) => {
+    node.title = t(node.dataset.i18nTitle);
+  });
+  document.querySelectorAll("[data-lang]").forEach((node) => {
+    node.classList.toggle("on", node.dataset.lang === LANG);
+  });
+}
 
 // каждый асинхронный запрос получает номер: ответ старого запроса не должен
 // перерисовать экран поверх нового (быстрые тапы по категориям)
@@ -64,7 +314,10 @@ function money(value) {
  *  только передаём, доверять клиентской копии нельзя. */
 function tgHeaders() {
   const tg = window.Telegram && window.Telegram.WebApp;
-  return tg && tg.initData ? { "X-Telegram-Init-Data": tg.initData } : {};
+  // язык — чтобы сервер ответил на нём же: тексты ошибок для покупателя
+  const headers = { "X-Lang": LANG };
+  if (tg && tg.initData) headers["X-Telegram-Init-Data"] = tg.initData;
+  return headers;
 }
 
 async function api(path, options = {}) {
@@ -135,7 +388,7 @@ async function loadCatalog() {
     // значит терять место, на котором он был
     showCurrentList();
   } catch (error) {
-    fail("Не удалось загрузить каталог. Проверьте подключение к интернету.", error);
+    fail(t("catalog_fail"), error);
   }
 }
 
@@ -158,14 +411,14 @@ function showCurrentList() {
     ? state.allProducts
     : state.allProducts.filter((p) => p.category_id === state.categoryId);
 
-  el("list-title").textContent = category ? category.name : "Все товары";
+  el("list-title").textContent = category ? category.name : t("all_goods");
   renderProducts(products);
 }
 
 /** Лента категорий. Выбранная подсвечена, «Все» сбрасывает отбор. */
 function renderCategories() {
   const all = `<span class="chip plain ${state.categoryId === null ? "on" : ""}"
-      data-category="0">Все</span>`;
+      data-category="0">${t("all_chip")}</span>`;
   el("categories").innerHTML = all + state.categories
     .map((c) => `
       <span class="chip ${c.id === state.categoryId ? "on" : ""}" data-category="${c.id}">
@@ -174,22 +427,23 @@ function renderCategories() {
     .join("");
 }
 
-function renderProducts(products, empty = "Товаров нет") {
-  el("list-count").textContent = `${products.length} ${plural(products.length)}`;
+function renderProducts(products, empty = t("no_goods")) {
+  el("list-count").textContent = countText(products.length);
   if (!products.length) {
     el("products").innerHTML = `<div class="msg" style="grid-column:1/-1">${esc(empty)}</div>`;
     return;
   }
   el("products").innerHTML = products
     .map((p) => {
-      const prefix = p.weights.length > 1 ? "от " : "";
+      // «от 45 000» / «45 000 dan»: в узбекском предлог встаёт после числа
+      const from = p.weights.length > 1;
       return `
         <div class="pcard" data-product="${p.id}">
           ${photo(p.photo, 128)}
           <div class="nm" style="margin-top:8px">${esc(p.name)}</div>
           <div class="sub">${esc(p.weights.join(" · "))}</div>
           <div class="row">
-            <span class="prc" style="font-size:13.5px">${prefix}${money(p.min_price)}</span>
+            <span class="prc" style="font-size:13.5px">${from && LANG === "ru" ? "от " : ""}${money(p.min_price)}${from && LANG === "uz" ? " dan" : ""}</span>
             <span class="qb" style="background:#E30613;color:#fff"><i class="ti ti-plus" style="font-size:15px"></i></span>
           </div>
         </div>`;
@@ -228,15 +482,15 @@ function search(query) {
     renderCategories();        // перерисовываем ленту только когда она изменилась
   }
   if (!state.query) {
-    el("list-title").textContent = "Все товары";
+    el("list-title").textContent = t("all_goods");
     return renderProducts(state.allProducts);
   }
 
   const needle = normalize(state.query);
-  el("list-title").textContent = "Найдено";
+  el("list-title").textContent = t("found");
   renderProducts(
     state.allProducts.filter((p) => normalize(p.name).includes(needle)),
-    "Ничего не нашлось. Попробуйте другое слово.",
+    t("nothing_found"),
   );
 }
 
@@ -251,12 +505,12 @@ async function selectCategory(categoryId) {
     if (my !== requestId) return;   // пока ждали, пользователь выбрал другое
     state.categoryId = next;
     const category = state.categories.find((c) => c.id === next);
-    el("list-title").textContent = category ? category.name : "Все товары";
+    el("list-title").textContent = category ? category.name : t("all_goods");
     renderCategories();
     renderProducts(products);
     window.scrollTo({ top: 0, behavior: "smooth" });   // чтобы лента осталась на виду
   } catch (error) {
-    if (my === requestId) fail("Не удалось загрузить товары категории.", error);
+    if (my === requestId) fail(t("category_fail"), error);
   }
 }
 
@@ -274,14 +528,14 @@ async function openProduct(productId) {
     renderProduct();
     show("product");
   } catch (error) {
-    if (my === requestId) fail("Не удалось открыть товар.", error);
+    if (my === requestId) fail(t("product_fail"), error);
   }
 }
 
 function renderProduct() {
   const p = state.product;
   const options = p.variants.length > 1
-    ? `<div class="mut" style="margin:16px 0 8px">Фасовка</div>
+    ? `<div class="mut" style="margin:16px 0 8px">${t("packaging")}</div>
        <div style="display:flex;gap:8px;flex-wrap:wrap">
          ${p.variants.map((v) => `
            <span class="wopt ${v.id === state.variant.id ? "on" : ""}" data-variant="${v.id}">${esc(v.weight)}</span>`).join("")}
@@ -289,9 +543,9 @@ function renderProduct() {
     : "";
 
   const extra = [
-    ["Категория", p.category],
-    ["Состав", p.composition],
-    ["Срок годности", p.shelf_life],
+    [t("category"), p.category],
+    [t("composition"), p.composition],
+    [t("shelf_life"), p.shelf_life],
   ].filter(([, value]) => value);
 
   el("product-body").innerHTML = `
@@ -304,7 +558,7 @@ function renderProduct() {
       </div>
       ${options}
       <div class="row" style="margin-top:16px">
-        <span class="mut">Количество</span>
+        <span class="mut">${t("quantity")}</span>
         <div style="display:flex;align-items:center;gap:8px">
           <span class="qb" id="minus" style="background:#F1F1F1"><i class="ti ti-minus" style="font-size:15px"></i></span>
           <span style="font-size:16px;min-width:22px;text-align:center" id="qty-value">${state.qty}</span>
@@ -312,7 +566,7 @@ function renderProduct() {
         </div>
       </div>
     </div>
-    ${p.description ? `<div class="card"><div class="mut" style="margin-bottom:6px">Описание</div><div style="line-height:1.6">${esc(p.description)}</div></div>` : ""}
+    ${p.description ? `<div class="card"><div class="mut" style="margin-bottom:6px">${t("description")}</div><div style="line-height:1.6">${esc(p.description)}</div></div>` : ""}
     ${extra.length ? `<div class="card" style="background:#F7F7F7">${extra.map(([k, v], i) => `
       <div class="row" ${i < extra.length - 1 ? 'style="margin-bottom:9px"' : ""}>
         <span class="mut">${esc(k)}</span><span style="font-size:13px;text-align:right">${esc(v)}</span></div>`).join("")}</div>` : ""}
@@ -323,7 +577,7 @@ function renderProduct() {
 /** Меняем только цифры: полный ре-рендер моргал бы фотографией на каждый «+». */
 function updateTotal() {
   el("qty-value").textContent = state.qty;
-  el("add").textContent = `В корзину · ${money(state.variant.price * state.qty)}`;
+  el("add").textContent = `${t("to_cart")} · ${money(state.variant.price * state.qty)}`;
 }
 
 // ---------- корзина ----------
@@ -417,9 +671,9 @@ async function refreshCart() {
   state.cart = kept;
 
   state.cartNotice = gone
-    ? "Часть товаров больше не продаётся — мы убрали их из корзины."
+    ? t("cart_gone")
     : changed
-      ? "Цены обновились."
+      ? t("prices_updated")
       : "";
   if (gone || changed) saveCart();
 }
@@ -441,7 +695,7 @@ function renderCart() {
   el("to-checkout").disabled = !state.cart.length;
 
   if (!state.cart.length) {
-    el("cart-body").innerHTML = notice + `<div class="msg">Корзина пуста</div>`;
+    el("cart-body").innerHTML = notice + `<div class="msg">${t("cart_empty")}</div>`;
     return;
   }
 
@@ -465,7 +719,7 @@ function renderCart() {
 
   el("cart-body").innerHTML = notice + lines + `<div class="card">${totalsRows()}</div>` + `
     <div class="mut" style="font-size:12px;text-align:center;line-height:1.6">
-      <i class="ti ti-info-circle"></i> Состав можно менять до оформления заказа
+      <i class="ti ti-info-circle"></i> ${t("cart_hint")}
     </div>`;
 }
 
@@ -473,12 +727,12 @@ function renderCart() {
 function totalsRows() {
   const goods = goodsTotal();
   return `
-    <div class="row" style="margin-bottom:9px"><span class="mut">Товары (${cartCount()})</span>
+    <div class="row" style="margin-bottom:9px"><span class="mut">${t("goods_n", { n: cartCount() })}</span>
       <span style="font-size:13px">${money(goods)}</span></div>
-    <div class="row" style="margin-bottom:11px"><span class="mut">Доставка</span>
+    <div class="row" style="margin-bottom:11px"><span class="mut">${t("delivery")}</span>
       <span style="font-size:13px">${money(state.deliveryPrice)}</span></div>
     <div class="row" style="border-top:1px solid #EDEDED;padding-top:11px">
-      <span style="font-size:15px;font-weight:600">Итого</span>
+      <span style="font-size:15px;font-weight:600">${t("total")}</span>
       <span class="prc" style="font-size:17px">${money(goods + state.deliveryPrice)}</span></div>`;
 }
 
@@ -487,19 +741,19 @@ function totalsRows() {
 function renderCheckout() {
   el("slots").innerHTML = SLOTS.map(([name, hint]) => `
     <div class="opt ${state.slot === name ? "on" : ""}" data-slot="${esc(name)}">
-      <div><div style="font-size:14px">${esc(name)}</div>
-        <div class="mut" style="font-size:11px">${esc(hint)}</div></div>
+      <div><div style="font-size:14px">${esc(slotText(name))}</div>
+        <div class="mut" style="font-size:11px">${esc(slotText(hint))}</div></div>
       <i class="ti ${state.slot === name ? "ti-circle-check" : "ti-circle"}"></i>
     </div>`).join("");
 
   el("payments").innerHTML = availablePayments().map(([code, name, icon]) => `
     <div class="opt ${state.payment === code ? "on" : ""}" data-payment="${code}">
-      <span style="font-size:14px"><i class="ti ${icon}" style="color:#E30613"></i> ${esc(name)}</span>
+      <span style="font-size:14px"><i class="ti ${icon}" style="color:#E30613"></i> ${esc(t(name))}</span>
       <i class="ti ${state.payment === code ? "ti-circle-check" : "ti-circle"}"></i>
     </div>`).join("");
 
   el("checkout-total").innerHTML = totalsRows();
-  el("submit-order").textContent = `Подтвердить заказ · ${money(goodsTotal() + state.deliveryPrice)}`;
+  el("submit-order").textContent = `${t("confirm_order")} · ${money(goodsTotal() + state.deliveryPrice)}`;
 }
 
 function showError(message) {
@@ -522,12 +776,12 @@ async function submitOrder() {
   const needConsent = !el("agree-box").classList.contains("hidden") && !el("agree").checked;
   el("agree-box").classList.toggle("bad", needConsent);
   if (problems.length) {
-    return showError("Заполните имя, номер телефона в формате +998 XX XXX XX XX и адрес доставки.");
+    return showError(t("fill_fields"));
   }
-  if (needConsent) return showError("Отметьте согласие на обработку данных.");
+  if (needConsent) return showError(t("need_consent"));
 
   state.sending = true;
-  el("submit-order").textContent = "Отправляем…";
+  el("submit-order").textContent = t("sending");
   try {
     const response = await fetch("/api/orders", {
       method: "POST",
@@ -559,20 +813,20 @@ async function submitOrder() {
     }
 
     if (response.status === 409) {
-      return openCart("Цены изменились. Проверьте корзину и подтвердите заказ заново.");
+      return openCart(t("prices_changed"));
     }
     if (response.status === 401) {
       // подпись Telegram живёт сутки: приложение провисело открытым дольше
       throw Object.assign(new Error(body && body.detail
         ? body.detail
-        : "Закройте и откройте приложение заново, вход в Telegram устарел."),
+        : t("relaunch")),
         { forUser: true });
     }
     if (!response.ok) {
       // текст сервера показываем только там, где он написан для покупателя
       const detail = response.status < 500 && body && typeof body.detail === "string"
         ? body.detail
-        : "Не удалось оформить заказ. Проверьте данные и попробуйте ещё раз.";
+        : t("order_failed");
       throw Object.assign(new Error(detail), { forUser: true });
     }
 
@@ -582,7 +836,7 @@ async function submitOrder() {
     renderCartBadge();
     if (!body) {
       // заказ создан, но ответ пришёл не в том виде — второй раз отправлять нельзя
-      throw Object.assign(new Error("Заказ отправлен. Найдите его в «Моих заказах»."),
+      throw Object.assign(new Error(t("order_sent")),
         { forUser: true });
     }
     state.orders = [body, ...(state.orders || []).filter((o) => o.number !== body.number)];
@@ -598,7 +852,7 @@ async function submitOrder() {
     // обрыв связи даёт техническое «Failed to fetch» — покупателю такое не показываем
     showError(error.forUser
       ? error.message
-      : "Не удалось отправить заказ. Проверьте связь и попробуйте ещё раз.");
+      : t("send_failed"));
     renderCheckout();   // возвращаем кнопке сумму вместо «Отправляем…»
   } finally {
     state.sending = false;
@@ -617,24 +871,19 @@ function renderDone(order, mode) {
   const card = order.payment_method === "online";
   mode = mode || (card ? (order.paid ? "paid" : "awaiting") : "cash");
   const view = {
-    cash: ["ti-check", "Заказ принят",
-      "Мы уже собираем ваш заказ.<br>Курьер свяжется перед доставкой."],
-    paid: ["ti-check", "Оплачено, заказ принят",
-      "Деньги получены, магазин начал сборку.<br>Курьеру платить не нужно."],
-    awaiting: ["ti-credit-card", "Заказ ждёт оплаты",
-      `Оплатите картой — после этого магазин начнёт сборку.<br>${esc(payUntilText(order))}`],
-    checking: ["ti-loader-2", "Проверяем оплату…", "Это займёт несколько секунд."],
-    slow: ["ti-clock", "Оплата проверяется",
-      "Как только банк подтвердит платёж, статус обновится в «Моих заказах»."],
-    expired: ["ti-x", "Заказ отменён",
-      "Время на оплату вышло. Оформите заказ заново."],
-    late: ["ti-alert-triangle", "Заказ отменён, а оплата прошла",
-      "Магазин свяжется с вами, чтобы вернуть деньги или восстановить заказ."],
-    external: ["ti-external-link", "Оплатите на странице Payme",
-      `Когда оплатите, вернитесь сюда — статус обновится сам.<br>${esc(payUntilText(order))}`],
+    cash: ["ti-check", t("cash_t"), t("cash_s")],
+    paid: ["ti-check", t("paid_t"), t("paid_s")],
+    awaiting: ["ti-credit-card", t("awaiting_t"),
+      `${t("awaiting_s")}<br>${esc(payUntilText(order))}`],
+    checking: ["ti-loader-2", t("checking_t"), t("checking_s")],
+    slow: ["ti-clock", t("slow_t"), t("slow_s")],
+    expired: ["ti-x", t("expired_t"), t("expired_s")],
+    late: ["ti-alert-triangle", t("late_t"), t("late_s")],
+    external: ["ti-external-link", t("external_t"),
+      `${t("external_s")}<br>${esc(payUntilText(order))}`],
   }[mode];
   const spin = mode === "checking" ? "animation:spin 1s linear infinite;" : "";
-  const sumLabel = mode === "paid" ? "Оплачено" : (card ? "К оплате" : "Оплата курьеру");
+  const sumLabel = mode === "paid" ? t("sum_paid") : (card ? t("sum_due") : t("sum_courier"));
 
   el("done-body").innerHTML = `
     <div style="text-align:center">
@@ -644,22 +893,22 @@ function renderDone(order, mode) {
       <div class="mut" style="margin-bottom:22px;line-height:1.65">${view[2]}</div>
     </div>
     ${mode === "awaiting" ? `<button class="btn" data-pay="${esc(order.number)}" style="margin-bottom:14px">
-      Оплатить${order.total ? " " + money(order.total) : ""}</button>` : ""}
+      ${t("pay")}${order.total ? " " + money(order.total) : ""}</button>` : ""}
     ${mode === "external" ? `<button class="btn" data-check-pay="${esc(order.number)}" style="margin-bottom:10px">
-      Я оплатил — проверить</button>
+      ${t("i_paid")}</button>
       <button class="btn" data-pay="${esc(order.number)}" style="margin-bottom:14px;background:#F2F2F2;color:#1A1A1A">
-      Открыть Payme ещё раз</button>` : ""}
+      ${t("payme_again")}</button>` : ""}
     <div class="card" style="background:#F7F7F7;text-align:center">
-      <div class="mut" style="font-size:12px;margin-bottom:4px">Номер заказа</div>
+      <div class="mut" style="font-size:12px;margin-bottom:4px">${t("order_number")}</div>
       <div style="font-size:21px;font-weight:600;letter-spacing:.6px">${esc(order.number)}</div>
     </div>
     ${order.items.length ? `<div class="card" style="background:#F7F7F7">
-      <div class="row" style="margin-bottom:9px"><span class="mut">Состав</span>
-        <span style="font-size:13px">${order.items.length} ${plural(order.items.length, "позиция", "позиции", "позиций")}</span></div>
+      <div class="row" style="margin-bottom:9px"><span class="mut">${t("composition")}</span>
+        <span style="font-size:13px">${countText(order.items.length, "positions")}</span></div>
       <div class="row" style="margin-bottom:9px"><span class="mut">${sumLabel}</span>
         <span class="prc" style="font-size:13px">${money(order.total)}</span></div>
-      <div class="row"><span class="mut">Доставка</span>
-        <span style="font-size:13px">${esc(order.delivery_slot)}</span></div>
+      <div class="row"><span class="mut">${t("delivery")}</span>
+        <span style="font-size:13px">${esc(slotText(order.delivery_slot))}</span></div>
     </div>` : ""}`;
 }
 
@@ -693,7 +942,7 @@ function ask(text, done) {
 }
 
 function forgetProfile() {
-  ask("Удалить имя, телефон и адрес? Уже оформленные заказы останутся.", async (yes) => {
+  ask(t("forget_q"), async (yes) => {
     if (!yes) return;
     try {
       await api("/api/profile", { method: "DELETE" });
@@ -703,7 +952,7 @@ function forgetProfile() {
       renderProfile();
     } catch (error) {
       console.error(error);
-      el("profile-error").textContent = "Не удалось удалить. Проверьте связь.";
+      el("profile-error").textContent = t("forget_fail");
       el("profile-error").classList.remove("hidden");
     }
   });
@@ -726,12 +975,19 @@ function applyProfile() {
   // согласие берётся один раз: уже дано — больше не спрашиваем
   el("agree-box").classList.toggle("hidden", p.consent);
 
+  renderAddrBar();
+}
+
+/** Строка адреса над каталогом. */
+function renderAddrBar() {
+  const p = state.profile;
+  if (!p) return;
   el("addr").classList.remove("hidden");
   // в шапке показываем адрес с домом: без него строка «Шарк Тонги улица»
   // выглядит как незаполненная
-  const short = [p.address, p.house && `дом ${p.house}`].filter(Boolean).join(", ");
-  el("addr-t").textContent = short || "Укажите адрес";
-  el("addr-s").textContent = p.address ? "Доставим за 60–90 минут" : "Чтобы не набирать при заказе";
+  const short = [p.address, p.house && t("house_n", { n: p.house })].filter(Boolean).join(", ");
+  el("addr-t").textContent = short || t("set_address");
+  el("addr-s").textContent = p.address ? t("deliver_time") : t("addr_hint");
 }
 
 function renderProfile() {
@@ -747,7 +1003,7 @@ function renderProfile() {
   el("p-agree-box").classList.toggle("hidden", p.consent);
   el("p-agree").checked = false;
   el("profile-error").classList.add("hidden");
-  el("save-profile").textContent = "Сохранить";
+  el("save-profile").textContent = t("save");
   el("forget").classList.toggle("hidden", !p.consent);
 }
 
@@ -763,13 +1019,13 @@ async function saveProfile() {
   el("p-agree-box").classList.toggle("bad", needConsent);
   if (problems.length || needConsent) {
     el("profile-error").textContent = problems.length
-      ? "Заполните имя, номер телефона в формате +998 XX XXX XX XX и адрес доставки."
-      : "Отметьте согласие на обработку данных.";
+      ? t("fill_fields")
+      : t("need_consent");
     return el("profile-error").classList.remove("hidden");
   }
 
   state.savingProfile = true;
-  el("save-profile").textContent = "Сохраняем…";
+  el("save-profile").textContent = t("saving");
   try {
     state.profile = await api("/api/profile", {
       method: "PUT",
@@ -790,9 +1046,9 @@ async function saveProfile() {
   } catch (error) {
     console.error(error);
     el("profile-error").textContent =
-      error.detail || "Не удалось сохранить. Проверьте данные и связь.";
+      error.detail || t("save_fail");
     el("profile-error").classList.remove("hidden");
-    el("save-profile").textContent = "Сохранить";
+    el("save-profile").textContent = t("save");
   } finally {
     state.savingProfile = false;
   }
@@ -813,18 +1069,18 @@ function badContactFields(values, prefix) {
 
 async function openOrders() {
   show("orders");
-  el("orders-body").innerHTML = `<div class="msg">Загружаем…</div>`;
+  el("orders-body").innerHTML = `<div class="msg">${t("loading")}</div>`;
   try {
     const orders = await api("/api/my-orders");
     state.orders = orders;      // из этого списка открывается карточка заказа
     el("orders-body").innerHTML = orders.length
       ? orders.map(orderCard).join("")
-      : `<div class="msg">Вы ещё ничего не заказывали</div>`;
+      : `<div class="msg">${t("no_orders")}</div>`;
   } catch (error) {
     console.error(error);
     el("orders-body").innerHTML = `<div class="msg">${error.status === 401
-      ? "Закройте и откройте приложение заново, вход в Telegram устарел."
-      : "Не удалось загрузить заказы."}</div>`;
+      ? t("relaunch")
+      : t("orders_fail")}</div>`;
   }
 }
 
@@ -843,7 +1099,7 @@ const TRACK = [
 function tracker(order, big = false) {
   const size = big ? " big" : "";
   if (order.status === "CANCELED") {
-    return `<div class="track-off${size}"><i class="ti ti-x"></i> ${esc(order.status_text)}</div>`;
+    return `<div class="track-off${size}"><i class="ti ti-x"></i> ${esc(statusText(order))}</div>`;
   }
   // сколько шагов уже пройдено: «ждёт оплаты» — ни одного
   const done = TRACK.findIndex((step) => step.status === order.status);
@@ -853,11 +1109,11 @@ function tracker(order, big = false) {
     return `${line}<span class="st${on ? " on" : ""}"><i class="ti ${step.icon}"></i></span>`;
   }).join("");
   return `<div class="track${size}">${cells}</div>
-          <div class="track-name${size}">${esc(order.status_text)}</div>`;
+          <div class="track-name${size}">${esc(statusText(order))}</div>`;
 }
 
 function orderCard(order) {
-  const when = new Date(order.created_at).toLocaleString("ru-RU", {
+  const when = new Date(order.created_at).toLocaleString(locale(), {
     day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
   });
   return `
@@ -872,14 +1128,14 @@ function orderCard(order) {
       ${tracker(order)}
       ${awaitingPayment(order) ? `
         <button class="btn" data-pay="${esc(order.number)}" style="padding:11px;margin:6px 0 8px">
-          Оплатить ${money(order.total)}</button>
+          ${t("pay")} ${money(order.total)}</button>
         <div class="mut" style="font-size:12px;text-align:center;margin-bottom:6px">
           ${esc(payUntilText(order))}</div>` : ""}
       <div class="row">
         <span class="mut" style="font-size:12px">
-          ${order.items.length} ${plural(order.items.length, "позиция", "позиции", "позиций")}
-          · ${esc(order.delivery_slot)}</span>
-        <span class="mut" style="font-size:12px">подробнее ›</span>
+          ${countText(order.items.length, "positions")}
+          · ${esc(slotText(order.delivery_slot))}</span>
+        <span class="mut" style="font-size:12px">${t("more")}</span>
       </div>
     </div>`;
 }
@@ -891,15 +1147,15 @@ function orderCard(order) {
 function openOrder(number) {
   const order = (state.orders || []).find((o) => o.number === number);
   if (!order) return;
-  el("order-ttl").textContent = `Заказ ${order.number}`;
-  const when = new Date(order.created_at).toLocaleString("ru-RU", {
+  el("order-ttl").textContent = t("order_n", { n: order.number });
+  const when = new Date(order.created_at).toLocaleString(locale(), {
     day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
   });
   const card = order.payment_method === "online";
-  const paymentText = !card ? "наличными курьеру"
-    : order.paid ? "картой — оплачено"
-    : order.status === "CANCELED" ? "картой — не оплачен"
-    : "картой — ждёт оплаты";
+  const paymentText = !card ? t("pm_cash")
+    : order.paid ? t("pm_paid")
+    : order.status === "CANCELED" ? t("pm_unpaid")
+    : t("pm_waiting");
 
   el("order-body").innerHTML = `
     <div class="card">
@@ -910,36 +1166,36 @@ function openOrder(number) {
       ${tracker(order, true)}
       ${awaitingPayment(order) ? `
         <button class="btn" data-pay="${esc(order.number)}" style="margin-top:6px">
-          Оплатить ${money(order.total)}</button>
+          ${t("pay")} ${money(order.total)}</button>
         <div class="mut" style="font-size:12px;text-align:center;margin-top:8px">
           ${esc(payUntilText(order))}</div>` : ""}
     </div>
 
     <div class="card">
-      <div class="mut" style="font-size:12.5px;margin-bottom:8px">Состав заказа</div>
+      <div class="mut" style="font-size:12.5px;margin-bottom:8px">${t("order_items")}</div>
       ${order.items.map(orderLine).join("")}
       <div class="row" style="font-size:13.5px;margin-top:10px">
-        <span class="mut">Товары</span><span>${money(order.goods_total)}</span>
+        <span class="mut">${t("goods")}</span><span>${money(order.goods_total)}</span>
       </div>
       <div class="row" style="font-size:13.5px;margin-top:6px">
-        <span class="mut">Доставка</span><span>${money(order.delivery_price)}</span>
+        <span class="mut">${t("delivery")}</span><span>${money(order.delivery_price)}</span>
       </div>
       <div class="row" style="margin-top:8px">
-        <span style="font-weight:600">Итого</span>
+        <span style="font-weight:600">${t("total")}</span>
         <span class="prc" style="font-weight:600">${money(order.total)}</span>
       </div>
     </div>
 
     <div class="card">
-      <div class="ord-row"><span class="k">Куда</span>
+      <div class="ord-row"><span class="k">${t("where")}</span>
         <span class="v">${esc(order.address)}</span></div>
-      <div class="ord-row"><span class="k">Телефон</span>
+      <div class="ord-row"><span class="k">${t("phone")}</span>
         <span class="v">${esc(order.phone)}</span></div>
-      <div class="ord-row"><span class="k">Время</span>
-        <span class="v">${esc(order.delivery_slot)}</span></div>
-      <div class="ord-row"><span class="k">Оплата</span>
+      <div class="ord-row"><span class="k">${t("time")}</span>
+        <span class="v">${esc(slotText(order.delivery_slot))}</span></div>
+      <div class="ord-row"><span class="k">${t("payment")}</span>
         <span class="v">${paymentText}</span></div>
-      ${order.comment ? `<div class="ord-row"><span class="k">Комментарий</span>
+      ${order.comment ? `<div class="ord-row"><span class="k">${t("comment")}</span>
         <span class="v">${esc(order.comment)}</span></div>` : ""}
     </div>`;
   show("order");
@@ -1047,7 +1303,7 @@ async function openMap(prefix) {
   } catch (error) {
     console.error(error);
     show(prefix === "f" ? "checkout" : "profile");
-    return note("Карта не загрузилась. Проверьте связь или напишите адрес словами.");
+    return note(t("map_fail"));
   }
 
   const point = state.point[prefix];
@@ -1192,17 +1448,17 @@ function offerSettings(manager) {
   const tg = window.Telegram && window.Telegram.WebApp;
   if (manager.isAccessGranted === false && manager.openSettings && tg && tg.showConfirm) {
     return tg.showConfirm(
-      "Доступ к геопозиции для приложения выключен. Открыть настройки?",
+      t("geo_settings"),
       (yes) => { if (yes) manager.openSettings(); },
     );
   }
-  note("Не удалось определить местоположение. Найдите дом на карте руками.");
+  note(t("geo_fail"));
 }
 
 async function browserLocate(quiet) {
   if (!navigator.geolocation) {
     setLocating(false);
-    if (!quiet) note("Телефон не дал определить местоположение. Найдите дом на карте руками.");
+    if (!quiet) note(t("geo_phone"));
     return;
   }
   if (quiet) {
@@ -1227,10 +1483,7 @@ async function browserLocate(quiet) {
     (error) => {
       setLocating(false);
       if (quiet) return;
-      note(error.code === 1
-        ? "Доступ к геопозиции запрещён. Разрешите его в настройках телефона "
-          + "или найдите дом на карте руками."
-        : "Не удалось определить местоположение. Найдите дом на карте руками.");
+      note(error.code === 1 ? t("geo_denied") : t("geo_fail"));
     },
     // maximumAge: свежий сигнал ищем не дольше десяти секунд, а ответ минутной
     // давности берём сразу — на улице он тот же, а ждать не приходится
@@ -1282,7 +1535,7 @@ function note(text) {
 function scheduleLookup() {
   clearTimeout(mapLookup);
   mapHouse = "";
-  setMapAddress("", "Определяем адрес…");
+  setMapAddress("", t("addr_lookup"));
   mapLookup = setTimeout(lookupAddress, 900);
 }
 
@@ -1296,12 +1549,11 @@ async function lookupAddress() {
     const now = mapView.getCenter();
     if (now.lat.toFixed(6) !== at[0] || now.lng.toFixed(6) !== at[1]) return;
     mapHouse = found.house || "";
-    setMapAddress(found.address || "", found.address
-      ? "" : "Адрес не определился — напишите его словами");
+    setMapAddress(found.address || "", found.address ? "" : t("addr_unknown"));
   } catch (error) {
     console.error(error);
     mapHouse = "";
-    setMapAddress("", "Адрес не определился — напишите его словами");
+    setMapAddress("", t("addr_unknown"));
   }
 }
 
@@ -1309,10 +1561,10 @@ function setMapAddress(address, fallbackHint) {
   mapAddress = address;
   // номер дома показываем вместе с улицей: человек должен видеть, что булавка
   // стоит на его доме, а не на соседнем
-  const shown = address && mapHouse ? `${address}, дом ${mapHouse}` : address;
+  const shown = address && mapHouse ? t("addr_house", { a: address, h: mapHouse }) : address;
   el("map-hint").textContent = shown
     || fallbackHint
-    || "Подвиньте карту так, чтобы булавка встала на ваш дом.";
+    || t("map_hint");
 }
 
 /** Запоминает точку в центре карты и возвращает покупателя к форме. */
@@ -1358,9 +1610,9 @@ function renderPoint(prefix) {
   box.classList.toggle("hidden", !point);
   if (!point) return;
   box.innerHTML = `
-    <span class="ok">Адрес и дом взяты с карты</span>
-    <button data-map="${prefix}">изменить точку</button>
-    <button data-drop-map="${prefix}">убрать</button>`;
+    <span class="ok">${t("point_ok")}</span>
+    <button data-map="${prefix}">${t("point_change")}</button>
+    <button data-drop-map="${prefix}">${t("point_drop")}</button>`;
 }
 
 // ---------- обновление свайпом сверху вниз ----------
@@ -1496,7 +1748,7 @@ function availablePayments() {
 async function payOrder(number) {
   const tg = window.Telegram && window.Telegram.WebApp;
   if (!tg) {
-    return note("Оплатить картой можно только в приложении Telegram.");
+    return note(t("tg_only"));
   }
   if (state.paying) return;          // двойное нажатие открыло бы два окна
   state.paying = true;
@@ -1509,7 +1761,7 @@ async function payOrder(number) {
     }
     if (!tg.openInvoice) {
       state.paying = false;
-      return note("Обновите Telegram, чтобы оплатить картой.");
+      return note(t("tg_update"));
     }
     tg.openInvoice(link, (status) => afterInvoice(number, status));
     // окно Telegram модальное: второе поверх не откроется, и держать флаг
@@ -1518,7 +1770,7 @@ async function payOrder(number) {
   } catch (error) {
     state.paying = false;
     console.error(error);
-    note(error.detail || "Не удалось открыть оплату. Попробуйте ещё раз.");
+    note(error.detail || t("pay_open_fail"));
   }
 }
 
@@ -1550,7 +1802,7 @@ async function checkExternalPayment(number, byButton) {
       }
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
-    if (byButton) note("Оплата ещё не поступила. Если вы уже оплатили — подождите минуту.");
+    if (byButton) note(t("not_yet"));
   } finally {
     state.checkingPay = false;
   }
@@ -1581,7 +1833,7 @@ async function afterInvoice(number, status) {
   renderDone(order || orderStub(number), order ? stateOf(order) : "awaiting");
   show("done");
   if (status === "failed" && order && awaitingPayment(order)) {
-    note("Оплата не прошла. Можно попробовать ещё раз.");
+    note(t("pay_failed"));
   }
 }
 
@@ -1636,9 +1888,9 @@ function awaitingPayment(order) {
 
 function payUntilText(order) {
   if (!order.pay_until) return "";
-  const until = new Date(order.pay_until).toLocaleTimeString("ru-RU",
+  const until = new Date(order.pay_until).toLocaleTimeString(locale(),
     { hour: "2-digit", minute: "2-digit" });
-  return `Без оплаты заказ отменится в ${until}.`;
+  return t("pay_until", { t: until });
 }
 
 // ---------- переключение экранов ----------
@@ -1729,6 +1981,9 @@ document.addEventListener("click", (event) => {
   if (event.target.closest("#back")) return show("catalog");
   if (event.target.closest("#add")) return addToCart();
 
+  const langButton = event.target.closest("[data-lang]");
+  if (langButton) return setLang(langButton.dataset.lang);
+
   const payButton = event.target.closest("[data-pay]");
   if (payButton) return payOrder(payButton.dataset.pay);
 
@@ -1807,6 +2062,29 @@ document.addEventListener("click", (event) => {
   if (go) return go.dataset.go === "cart" ? openCart() : show(go.dataset.go);
 });
 
+/** Смена языка: тексты разметки и всё, что на экране сейчас, — заново.
+ *  Набранное в полях не трогаем. */
+function setLang(lang) {
+  if (lang === LANG || !I18N[lang]) return;
+  LANG = lang;
+  try {
+    localStorage.setItem(LANG_KEY, lang);
+  } catch (error) {
+    console.error(error);   // приватный режим — выбор продержится до закрытия
+  }
+  applyStatic();
+  renderCategories();
+  if (state.allProducts.length) showCurrentList();
+  renderAddrBar();
+  renderPoint("f");
+  renderPoint("p");
+  if (!state.savingProfile) el("save-profile").textContent = t("save");
+  if (state.screen === "cart") renderCart();
+  if (state.screen === "checkout") renderCheckout();
+  if (state.screen === "orders") openOrders();
+  if (state.screen === "product" && state.product) renderProduct();
+}
+
 function changeCartQty(index, delta) {
   const item = state.cart[index];
   if (!item) return;
@@ -1856,6 +2134,7 @@ function setupTelegram() {
 }
 
 async function start() {
+  applyStatic();
   setupTelegram();
   loadSavedCart();
   show("catalog");
@@ -1866,7 +2145,7 @@ async function start() {
     state.deliveryPrice = price;
     await loadCatalog();
   } catch (error) {
-    fail("Не удалось загрузить каталог. Проверьте подключение к интернету.", error);
+    fail(t("catalog_fail"), error);
   }
 }
 
@@ -1893,7 +2172,7 @@ start();
       if (!me || !me.admin) return;
       var a = document.createElement('a');
       a.href = '/admin?tg=1';   // подпись проверит сама панель
-      a.textContent = 'Панель';
+      a.textContent = t('admin_panel');
       a.style.cssText = 'position:fixed;left:10px;bottom:76px;z-index:900;' +
         'background:#E30613;color:#fff;border-radius:18px;padding:7px 14px;' +
         'font-size:12px;text-decoration:none;box-shadow:0 3px 12px rgba(0,0,0,.25)';

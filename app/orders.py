@@ -1,7 +1,7 @@
 """Оформление заказа."""
 from datetime import timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Response
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
@@ -285,6 +285,7 @@ def order_invoice(
     number: str,
     db: Session = Depends(get_db),
     user: TelegramUser = Depends(require_user),
+    x_lang: str | None = Header(default=None, alias="X-Lang"),
 ):
     """Счёт на оплату заказа картой.
 
@@ -311,7 +312,8 @@ def order_invoice(
         raise HTTPException(status_code=409, detail="Оплата картой сейчас недоступна")
     if payments.PROVIDER == "payme":
         from app import payme
-        return {"link": payme.checkout_url(order), "kind": "payme"}
+        from app import i18n
+        return {"link": payme.checkout_url(order, i18n.lang_of(x_lang)), "kind": "payme"}
     try:
         return {"link": payments.create_invoice_link(order), "kind": "telegram"}
     except payments.PaymentError as exc:

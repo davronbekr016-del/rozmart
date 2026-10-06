@@ -152,10 +152,11 @@ ORDER_PAYING = (-31055, "Заказ уже оплачивается", "Buyurtma 
 
 # ------------------------------------------------------------ ссылка на оплату
 
-def checkout_url(order: Order) -> str:
-    """Страница оплаты заказа в Payme. Параметры — base64 от «k=v;k=v»."""
+def checkout_url(order: Order, lang: str = "ru") -> str:
+    """Страница оплаты заказа в Payme. Параметры — base64 от «k=v;k=v».
+    lang — язык страницы Payme: тот же, что у покупателя в приложении."""
     params = [f"m={payments.PAYME_MERCHANT_ID}", f"ac.{ACCOUNT_FIELD}={order.number}",
-              f"a={order.total * payments.MINOR}", "l=ru"]
+              f"a={order.total * payments.MINOR}", f"l={'uz' if lang == 'uz' else 'ru'}"]
     if RETURN_URL:
         params.append(f"c={RETURN_URL}")
     encoded = base64.b64encode(";".join(params).encode()).decode()
