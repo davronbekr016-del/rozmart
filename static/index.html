@@ -176,7 +176,10 @@ body.tabs-on .ft{bottom:calc(var(--tabs) + var(--safe-bot));padding-bottom:12px}
   letter-spacing:-.3px}
 .lg-payme b{color:#1D2C43;font-weight:700}
 .lg-payme i{color:#33CCCC;font-style:normal;font-weight:700}
-.lg-paynet{color:#00A651;font-weight:700;font-style:italic}
+/* Paynet: зелёная точка и чёрное жирное «paynet» строчными */
+.lg-paynet{color:#141414;font-weight:700;letter-spacing:-.6px}
+.lg-paynet::before{content:"";display:inline-block;width:.62em;height:.62em;border-radius:50%;
+  background:#1ED760;margin-right:.12em;vertical-align:-.02em}
 /* переключатель языка в профиле */
 .langs{display:flex;gap:8px;margin-bottom:12px}
 .langs button{flex:1;padding:10px;border-radius:12px;border:1px solid #E5E5E5;background:#fff;
