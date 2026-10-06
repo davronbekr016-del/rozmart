@@ -52,10 +52,9 @@ router = APIRouter(tags=["Paynet"])
 
 WEBHOOK_PATH = "/paynet"
 FIELD = os.getenv("PAYNET_FIELD", "order_id").strip() or "order_id"
-# Ссылка, по которой приложение откроет оплату в Paynet, если Paynet её даст.
-# Подстановки: {service}, {order}, {amount} (в сумах). Пусто — покупателю
-# показываем, что ввести в Paynet
-PAY_URL = os.getenv("PAYNET_PAY_URL", "").strip()
+# Ссылка, по которой приложение откроет оплату в Paynet, если Paynet её даст, —
+# payments.PAYNET_PAY_URL (задаётся в панели). Подстановки: {service}, {order},
+# {amount} (в сумах). Пусто — покупателю показываем, что ввести в Paynet
 
 TASHKENT = timezone(timedelta(hours=5))
 SUCCESS, CANCELED, NOT_FOUND = 1, 2, 3
@@ -315,6 +314,7 @@ METHODS = {
 # ------------------------------------------------------------ вход
 
 def authorized(header: str | None) -> bool:
+    payments.refresh()
     if not header or not header.startswith("Basic ") or not payments.PAYNET_PASSWORD:
         return False
     try:

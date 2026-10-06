@@ -60,10 +60,15 @@ ACCOUNT_FIELD = "order_id"
 # Не путать с test.paycom.uz: там инструмент проверки кассы (песочница),
 # а не страница оплаты, хотя документация Payme называет его «URL отправки
 # чека в песочницу» — по ссылке оттуда покупатель увидит форму Merchant ID
-CHECKOUT_URL = os.getenv(
-    "PAYME_CHECKOUT_URL",
-    "https://checkout.test.paycom.uz" if payments.PAYME_TEST else "https://checkout.paycom.uz",
-).strip().rstrip("/")
+CHECKOUT_OVERRIDE = os.getenv("PAYME_CHECKOUT_URL", "").strip().rstrip("/")
+
+
+def checkout_base() -> str:
+    """Страница оплаты — по текущему режиму: его переключают в панели."""
+    if CHECKOUT_OVERRIDE:
+        return CHECKOUT_OVERRIDE
+    payments.refresh()
+    return "https://checkout.test.paycom.uz" if payments.PAYME_TEST else "https://checkout.paycom.uz"
 
 # Куда Payme вернёт покупателя после оплаты — обычно ссылка на бота магазина
 RETURN_URL = os.getenv("PAYME_RETURN_URL", "").strip()
@@ -160,7 +165,7 @@ def checkout_url(order: Order, lang: str = "ru") -> str:
     if RETURN_URL:
         params.append(f"c={RETURN_URL}")
     encoded = base64.b64encode(";".join(params).encode()).decode()
-    return f"{CHECKOUT_URL}/{encoded}"
+    return f"{checkout_base()}/{encoded}"
 
 
 # ------------------------------------------------------------ чек
@@ -451,6 +456,7 @@ METHODS = {
 
 def authorized(header: str | None) -> bool:
     """Basic с логином «Paycom» и ключом кассы. Сравнение постоянного времени."""
+    payments.refresh()
     if not header or not header.startswith("Basic ") or not payments.PAYME_KEY:
         return False
     try:

@@ -954,9 +954,58 @@ def _payment_switches() -> dict:
 
 
 @router.get("/payments")
-def payment_switches(_: TelegramUser = Depends(require_admin)):
-    """Способы онлайн-оплаты и их переключатели."""
-    return _payment_switches()
+def payment_switches(request: Request, _: TelegramUser = Depends(require_admin)):
+    """Способы онлайн-оплаты, их переключатели и ключи (секреты — хвостом)."""
+    base = os.getenv("PUBLIC_URL", "").strip().rstrip("/") or str(request.base_url).rstrip("/")
+    return {**_payment_switches(), "config": payments.config_view(),
+            "endpoints": {"payme": base + "/payme", "paynet": base + "/paynet"}}
+
+
+class PaymentConfigIn(BaseModel):
+    # только то, что меняем; секрет пустой строкой не стирается — его не трогают
+    values: dict[str, str]
+
+
+@router.put("/payments/config")
+def set_payment_config(data: PaymentConfigIn, request: Request, db: Session = Depends(get_db),
+                       _: TelegramUser = Depends(require_admin)):
+    """Ключи и режимы оплаты. Применяются за несколько секунд, без перезапуска."""
+    values = {}
+    for name, raw in data.values.items():
+        if name not in payments.CONFIG_FIELDS:
+            raise HTTPException(status_code=400, detail=f"Неизвестная настройка {name}")
+        value = (raw or "").strip()
+        if name in payments.SECRETS and not value:
+            continue                        # пустое поле секрета — «не менять»
+        if name == "PAYME_MERCHANT_ID" and value and not re.fullmatch(r"[0-9a-f]{24}", value):
+            raise HTTPException(status_code=400,
+                                detail="ID кассы Payme — 24 символа: цифры и латинские a–f")
+        if name == "PAYNET_SERVICE_ID" and value and not value.isdigit():
+            raise HTTPException(status_code=400, detail="Номер сервиса Paynet — только цифры")
+        if name == "TEST_USERS" and value and not re.fullmatch(r"[0-9]+(\s*,\s*[0-9]+)*", value):
+            raise HTTPException(status_code=400,
+                                detail="Тестировщики — Telegram-id цифрами через запятую")
+        if name in ("PAYME_TEST", "PAYNET_TEST", "TESTERS_ONLY") and value not in ("0", "1"):
+            raise HTTPException(status_code=400, detail="Режим — 0 или 1")
+        if name in payments.SECRETS and len(value) < 8:
+            raise HTTPException(status_code=400, detail="Ключ или пароль короче 8 символов")
+        values[name] = value
+    payments.set_config(db, values)
+    # что поменяли — в журнал, без значений секретов
+    log.info("Настройки оплаты изменены: %s", ", ".join(
+        f"{k}=…" if k in payments.SECRETS else f"{k}={v}" for k, v in values.items()))
+    return payment_switches(request, _)
+
+
+@router.post("/payments/paynet-password")
+def new_paynet_password(request: Request, db: Session = Depends(get_db),
+                        _: TelegramUser = Depends(require_admin)):
+    """Новый пароль для Paynet. Показывается один раз — его передают Paynet."""
+    import secrets as pysecrets
+    password = pysecrets.token_urlsafe(18)
+    payments.set_config(db, {"PAYNET_PASSWORD": password})
+    log.info("Пароль Paynet сгенерирован заново")
+    return {"password": password, **payment_switches(request, _)}
 
 
 class PaymentSwitchIn(BaseModel):
@@ -973,6 +1022,9 @@ def set_payment_switch(provider: str, data: PaymentSwitchIn, db: Session = Depen
     payments.set_switch(db, provider, data.on)
     log.info("Онлайн-оплата %s: %s", provider, "включена" if data.on else "выключена")
     return _payment_switches()
+
+
+
 
 
 class DeliveryPriceIn(BaseModel):

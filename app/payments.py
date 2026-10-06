@@ -81,6 +81,8 @@ PAYNET_LOGIN = os.getenv("PAYNET_LOGIN", "").strip()
 PAYNET_PASSWORD = os.getenv("PAYNET_PASSWORD", "").strip()
 PAYNET_SERVICE_ID = os.getenv("PAYNET_SERVICE_ID", "").strip()
 PAYNET_TEST = os.getenv("PAYNET_TEST", "1").strip() != "0"
+# Ссылка на оплату сервиса в Paynet, если Paynet её даст: {service}, {order}, {amount}
+PAYNET_PAY_URL = os.getenv("PAYNET_PAY_URL", "").strip()
 
 # Секрет вебхука магазинного бота. Без него вебхук отвергает всё, и оплата
 # гарантированно не пройдёт: запрос перед списанием уйдёт в тайм-аут.
@@ -130,6 +132,7 @@ class PaymentError(Exception):
 
 def configured(provider: str) -> bool:
     """Для способа заданы ключи."""
+    refresh()
     if provider == "payme":
         return bool(PAYME_MERCHANT_ID and PAYME_KEY)
     if provider == "paynet":
@@ -161,38 +164,75 @@ def is_test(provider: str | None = None) -> bool:
     return ":TEST:" in TOKEN
 
 
-# ------------------------------------------------------------ переключатели
+# ------------------------------------------------------------ настройки из панели
 
-# Администратор включает и выключает способы оплаты в панели: Setting
-# «payment_on:payme» = "0" — выключен. Нет записи — включён. Выключенный
-# способ покупатель не видит (плитка «Скоро»), но уже начатые оплаты и
-# возвраты сервер принимает как прежде — деньги не должны застрять.
+# Ключи и режимы оплаты администратор задаёт в панели («Онлайн оплата»).
+# Хранятся в Setting: «pay:PAYME_KEY» и т. п. Заданное в панели перекрывает
+# переменную окружения, пустое — возвращает её: так ключи, лежащие на сервере,
+# продолжают работать, пока их не поменяли в панели.
+#
+# Переключатели способов — Setting «payment_on:payme» = "0" — выключен, нет
+# записи — включён. Выключенный способ покупатель не видит (плитка «Скоро»),
+# но уже начатые оплаты и возвраты сервер принимает как прежде — деньги не
+# должны застрять.
+CONFIG_PREFIX = "pay:"
 SWITCH_PREFIX = "payment_on:"
-# сколько секунд помним переключатели: читать базу на каждый запрос незачем
+# сколько секунд помним настройки: читать базу на каждый запрос незачем
 SWITCH_TTL = 5
-_switches = {"at": 0.0, "off": set()}
+
+# имя -> разбор строки из базы; секреты панель целиком не показывает
+CONFIG_FIELDS = {
+    "PAYME_MERCHANT_ID": str, "PAYME_KEY": str, "PAYME_TEST": lambda v: v != "0",
+    "PAYNET_SERVICE_ID": str, "PAYNET_LOGIN": str, "PAYNET_PASSWORD": str,
+    "PAYNET_TEST": lambda v: v != "0", "PAYNET_PAY_URL": str,
+    "TEST_USERS": lambda v: {int(x) for x in v.replace(" ", "").split(",") if x.isdigit()},
+    "TESTERS_ONLY": lambda v: v == "1",
+}
+SECRETS = {"PAYME_KEY", "PAYNET_PASSWORD"}
+# значения из окружения — к ним возвращаемся, если в панели поле очистили
+_BASE = {name: globals()[name] for name in CONFIG_FIELDS}
+_state = {"at": 0.0, "off": set(), "applied": set(), "panel": {}}
 
 
-def switched_off() -> set[str]:
-    """Способы, выключенные администратором."""
+def refresh(force: bool = False) -> None:
+    """Перечитывает настройки из базы, если прошло больше SWITCH_TTL."""
     now = time.time()
-    if now - _switches["at"] < SWITCH_TTL:
-        return _switches["off"]
+    if not force and now - _state["at"] < SWITCH_TTL:
+        return
     from app.db import SessionLocal
     from app.models import Setting
 
     db = SessionLocal()
     try:
-        rows = db.scalars(select(Setting).where(Setting.name.like(SWITCH_PREFIX + "%"))).all()
-        off = {row.name[len(SWITCH_PREFIX):] for row in rows if row.value == "0"}
+        rows = db.scalars(select(Setting).where(
+            Setting.name.like(SWITCH_PREFIX + "%") | Setting.name.like(CONFIG_PREFIX + "%"))).all()
     except Exception:                       # noqa: BLE001
         # база недоступна — оставляем, что знали: молча включить выключенное нельзя
-        log.exception("Переключатели оплаты не прочитаны")
-        off = _switches["off"]
+        log.exception("Настройки оплаты не прочитаны")
+        _state["at"] = now
+        return
     finally:
         db.close()
-    _switches.update(at=now, off=off)
-    return off
+
+    off = {r.name[len(SWITCH_PREFIX):] for r in rows
+           if r.name.startswith(SWITCH_PREFIX) and r.value == "0"}
+    panel = {r.name[len(CONFIG_PREFIX):]: r.value for r in rows
+             if r.name.startswith(CONFIG_PREFIX) and r.name[len(CONFIG_PREFIX):] in CONFIG_FIELDS
+             and r.value.strip() != ""}
+    # Меняем только то, что задано в панели, и возвращаем окружение тому,
+    # что в панели очистили. Остального не касаемся — в том числе того, что
+    # проверки подменяют прямо в модуле
+    for name in set(_state["applied"]) - set(panel):
+        globals()[name] = _BASE[name]
+    for name, value in panel.items():
+        globals()[name] = CONFIG_FIELDS[name](value.strip())
+    _state.update(at=now, off=off, applied=set(panel), panel=panel)
+
+
+def switched_off() -> set[str]:
+    """Способы, выключенные администратором."""
+    refresh()
+    return _state["off"]
 
 
 def set_switch(db, provider: str, on: bool) -> None:
@@ -205,7 +245,46 @@ def set_switch(db, provider: str, on: bool) -> None:
     else:
         row.value = "1" if on else "0"
     db.commit()
-    _switches["at"] = 0.0                   # перечитать сразу, а не через TTL
+    refresh(force=True)                     # сразу, а не через TTL
+
+
+def set_config(db, values: dict[str, str]) -> None:
+    """Записывает настройки из панели. Пустая строка — вернуть окружение."""
+    from app.models import Setting
+
+    for name, value in values.items():
+        if name not in CONFIG_FIELDS:
+            continue
+        key = CONFIG_PREFIX + name
+        row = db.get(Setting, key)
+        if row is None:
+            db.add(Setting(name=key, value=value))
+        else:
+            row.value = value
+    db.commit()
+    refresh(force=True)
+
+
+def config_view() -> dict:
+    """Настройки для панели: откуда значение и само значение — секрет
+    только хвостом, «••••B?5»."""
+    refresh()
+    shown = {}
+    for name in CONFIG_FIELDS:
+        value = globals()[name]
+        if name == "TEST_USERS":
+            text = ",".join(str(x) for x in sorted(value))
+        elif isinstance(value, bool):
+            text = "1" if value else "0"
+        else:
+            text = str(value or "")
+        source = "panel" if name in _state["applied"] else ("server" if text else "none")
+        if name in SECRETS:
+            shown[name] = {"set": bool(text), "masked": ("••••" + text[-4:]) if text else "",
+                           "source": source}
+        else:
+            shown[name] = {"value": text, "source": source}
+    return shown
 
 
 def providers_for(telegram_id: int | None) -> list[str]:

@@ -332,8 +332,9 @@ def order_invoice(
         # номеру заказа. Ссылка — если Paynet даст адрес оплаты сервиса
         from app import paynet
         digits = order.number.removeprefix(paynet.ORDER_PREFIX)
-        link = paynet.PAY_URL.format(service=payments.PAYNET_SERVICE_ID, order=digits,
-                                     amount=order.total) if paynet.PAY_URL else None
+        link = (payments.PAYNET_PAY_URL.format(service=payments.PAYNET_SERVICE_ID, order=digits,
+                                               amount=order.total)
+                if payments.PAYNET_PAY_URL else None)
         return {"kind": "paynet", "link": link, "order": digits, "amount": order.total}
     if chosen == "payme":
         from app import payme

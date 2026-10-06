@@ -176,6 +176,56 @@ check(7, "Включили обратно — снова виден", opts["prov
 check(7, "Неподключённый способ — 404",
       client.put("/api/admin/payments/telegram", json={"on": True}, headers=ADMIN).status_code == 404)
 
+# ------------------------------------------------------------ ключи из панели
+r = client.get("/api/admin/payments", headers=ADMIN).json()
+cfg = r["config"]
+check(8, "Панель видит ключи с сервера, секрет — только хвостом",
+      cfg["PAYME_MERCHANT_ID"]["value"] == "65f0c0ffee0000000000abcd"
+      and cfg["PAYME_KEY"]["masked"] == "••••-123" and "value" not in cfg["PAYME_KEY"]
+      and cfg["PAYME_KEY"]["source"] == "server", cfg["PAYME_KEY"])
+check(8, "И адреса для Payme и Paynet", r["endpoints"]["paynet"].endswith("/paynet"))
+
+def put_cfg(values):
+    return client.put("/api/admin/payments/config", json={"values": values}, headers=ADMIN)
+
+check(8, "Кривой ID кассы — отказ", put_cfg({"PAYME_MERCHANT_ID": "xyz"}).status_code == 400)
+check(8, "Буквы в номере сервиса — отказ", put_cfg({"PAYNET_SERVICE_ID": "15a"}).status_code == 400)
+check(8, "Короткий пароль — отказ", put_cfg({"PAYNET_PASSWORD": "123"}).status_code == 400)
+check(8, "Покупатель ключи не меняет", client.put("/api/admin/payments/config", headers=TESTER,
+      json={"values": {"PAYNET_SERVICE_ID": "1"}}).status_code in (401, 404))
+
+r = put_cfg({"PAYNET_SERVICE_ID": "777", "PAYNET_LOGIN": "rozmart2", "PAYNET_PASSWORD": "NewPass-2026"})
+check(9, "Сохранили ключи Paynet в панели", r.status_code == 200
+      and r.json()["config"]["PAYNET_SERVICE_ID"] == {"value": "777", "source": "panel"}, r.json())
+new_auth = {"Authorization": "Basic " + base64.b64encode(b"rozmart2:NewPass-2026").decode()}
+r = client.post("/paynet", headers=new_auth, json={"jsonrpc": "2.0", "id": 1, "method": "CheckTransaction",
+                                                   "params": {"serviceId": 777, "transactionId": "1"}})
+check(9, "Paynet сразу пускает с новыми логином и паролем", r.status_code == 200
+      and r.json()["result"]["transactionState"] == 3, r.json())
+check(9, "Со старыми — уже нет", client.post("/paynet", headers=PAYNET, json={
+    "jsonrpc": "2.0", "id": 1, "method": "CheckTransaction", "params": {}}).status_code == 401)
+r = put_cfg({"PAYNET_PASSWORD": ""})
+check(9, "Пустое поле пароля — пароль не стёрт", client.post("/paynet", headers=new_auth, json={
+    "jsonrpc": "2.0", "id": 1, "method": "CheckTransaction",
+    "params": {"serviceId": 777, "transactionId": "1"}}).status_code == 200)
+
+r = client.post("/api/admin/payments/paynet-password", headers=ADMIN).json()
+gen = {"Authorization": "Basic " + base64.b64encode(f"rozmart2:{r['password']}".encode()).decode()}
+check(10, "Сгенерированный пароль сразу работает", len(r["password"]) >= 20 and client.post(
+    "/paynet", headers=gen, json={"jsonrpc": "2.0", "id": 1, "method": "CheckTransaction",
+                                  "params": {"serviceId": 777, "transactionId": "1"}}).status_code == 200)
+
+put_cfg({"PAYNET_SERVICE_ID": "", "PAYNET_LOGIN": ""})
+r = client.get("/api/admin/payments", headers=ADMIN).json()["config"]
+check(10, "Очистили в панели — снова значение с сервера",
+      r["PAYNET_SERVICE_ID"] == {"value": "155", "source": "server"}
+      and r["PAYNET_LOGIN"]["value"] == "rozmart")
+
+r = put_cfg({"TEST_USERS": "900, 905"})
+opts = client.get("/api/payment-options", headers=init_data(905)).json()
+check(11, "Тестировщика добавили в панели — он видит тестовую оплату", r.status_code == 200
+      and opts["providers"] == ["payme", "paynet"], opts)
+
 failed = [r for r in results if not r[2]]
 print(f"\nИтого проверок: {len(results)}, не прошло: {len(failed)}")
 sys.exit(1 if failed else 0)

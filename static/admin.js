@@ -557,61 +557,179 @@
     loadChats();
     loadPriceTypes();
     loadDelivery();
-    loadPaySwitches();
   }
 
   // --------------------------------------------------- онлайн-оплата: вкл/выкл
 
   function loadPaySwitches() {
-    api('/payments').then(renderPaySwitches).catch(function (e) {
-      document.getElementById('paySwitches').textContent = 'Не загрузилось: ' + e.message;
+    api('/payments').then(renderPayments).catch(function (e) {
+      document.getElementById('payCards').textContent = 'Не загрузилось: ' + e.message;
     });
   }
 
-  function renderPaySwitches(data) {
-    var box = document.getElementById('paySwitches');
+  // поля каждого способа: [имя настройки, подпись, вид, подсказка]
+  var PAY_FIELDS = {
+    payme: [
+      ['PAYME_MERCHANT_ID', 'ID кассы', 'text', '24 символа, из кабинета Payme Business'],
+      ['PAYME_KEY', 'Ключ кассы', 'secret', 'Боевой или тестовый — смотря по режиму ниже'],
+      ['PAYME_TEST', 'Тестовый режим (песочница Payme)', 'bool',
+       'Выключено — настоящие деньги']
+    ],
+    paynet: [
+      ['PAYNET_SERVICE_ID', 'Номер сервиса (serviceId)', 'text', 'Выдаёт Paynet'],
+      ['PAYNET_LOGIN', 'Логин', 'text', 'Задаём сами и передаём Paynet'],
+      ['PAYNET_PASSWORD', 'Пароль', 'secret', 'Задаём сами и передаём Paynet лично, не в группу'],
+      ['PAYNET_PAY_URL', 'Ссылка на оплату в Paynet', 'text',
+       'Если Paynet даст: {service}, {order}, {amount}. Пусто — покупатель вводит номер сам'],
+      ['PAYNET_TEST', 'Тестовый режим', 'bool', 'Выключено — настоящие деньги']
+    ]
+  };
+
+  var SOURCE = { panel: 'задано в панели', server: 'из настроек сервера', none: 'не задано' };
+
+  function payField(name, title, kind, hint, cfg) {
+    var f = el('div', 'fld');
+    var c = cfg[name] || {};
+    var label = el('label', null, title);
+    label.appendChild(el('span', 'src', '· ' + (SOURCE[c.source] || '')));
+    f.appendChild(label);
+    var input = document.createElement('input');
+    input.dataset.name = name;
+    if (kind === 'bool') {
+      var wrap = el('label', 'sw');
+      input.type = 'checkbox';
+      input.checked = c.value === '1';
+      input.dataset.kind = 'bool';
+      wrap.appendChild(input);
+      wrap.appendChild(document.createElement('span'));
+      f.appendChild(wrap);
+    } else {
+      input.type = kind === 'secret' ? 'password' : 'text';
+      input.autocomplete = 'off';
+      input.spellcheck = false;
+      if (kind === 'secret') {
+        input.placeholder = c.set ? 'задан ' + c.masked + ' — впишите новый, чтобы заменить'
+                                  : 'не задан';
+        input.dataset.kind = 'secret';
+      } else {
+        input.value = c.value || '';
+      }
+      f.appendChild(input);
+    }
+    if (hint) f.appendChild(el('div', 'hint', hint));
+    return f;
+  }
+
+  function collect(card) {
+    var values = {};
+    card.querySelectorAll('input[data-name]').forEach(function (i) {
+      if (i.dataset.kind === 'bool') values[i.dataset.name] = i.checked ? '1' : '0';
+      else if (i.dataset.kind === 'secret') { if (i.value.trim()) values[i.dataset.name] = i.value.trim(); }
+      else values[i.dataset.name] = i.value.trim();
+    });
+    return values;
+  }
+
+  function saveConfig(values, done) {
+    api('/payments/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: values })
+    }).then(function (r) { say('Сохранено', 'ok'); renderPayments(r); if (done) done(); })
+      .catch(function (e) { say(e.message); });
+  }
+
+  function switchFor(p) {
+    var label = document.createElement('label');
+    label.className = 'sw';
+    label.title = p.on ? 'Выключить' : 'Включить';
+    var box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = p.on;
+    box.onchange = function () {
+      var on = box.checked;
+      if (!on && !confirm('Выключить ' + p.title + '? Покупатели перестанут видеть этот способ '
+          + 'оплаты. Начатые оплаты пройдут.')) { box.checked = true; return; }
+      box.disabled = true;
+      api('/payments/' + p.provider, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ on: on })
+      }).then(function () {
+        say(p.title + (on ? ' включён' : ' выключен'), 'ok');
+        loadPaySwitches();
+      }).catch(function (e) { say(e.message); box.checked = !on; box.disabled = false; });
+    };
+    label.appendChild(box);
+    label.appendChild(document.createElement('span'));
+    return label;
+  }
+
+  function renderPayments(data) {
+    var box = document.getElementById('payCards');
     box.innerHTML = '';
+    var cfg = data.config || {};
     data.providers.forEach(function (p) {
-      var row = el('div');
-      row.style.cssText = 'display:flex;gap:12px;align-items:center;margin-bottom:8px;'
-        + 'max-width:640px;padding:10px 12px;border:1px solid #ECECEC;border-radius:10px';
-      var who = el('div');
-      who.style.cssText = 'flex:1;min-width:0';
-      var title = el('div', null, p.title);
-      title.style.fontWeight = '600';
-      who.appendChild(title);
+      var card = el('div', 'pcard');
+      var hd = el('div', 'pcard-hd');
+      hd.appendChild(el('div', 'ttl', p.title));
+      hd.appendChild(switchFor(p));
+      card.appendChild(hd);
       var state = !p.configured ? 'не подключён — покупатели видят «Скоро»'
         : !p.on ? 'выключен — покупатели видят «Скоро»'
         : p.testers_only ? 'включён, видят только тестировщики' + (p.test ? ' (тестовый режим)' : '')
         : 'включён — видят все покупатели';
-      who.appendChild(el('div', 'meta', state));
-      row.appendChild(who);
-
-      var label = document.createElement('label');
-      label.className = 'sw';
-      label.title = p.on ? 'Выключить' : 'Включить';
-      var box2 = document.createElement('input');
-      box2.type = 'checkbox';
-      box2.checked = p.on;
-      box2.onchange = function () {
-        var on = box2.checked;
-        if (!on && !confirm('Выключить ' + p.title + '? Покупатели перестанут видеть этот способ '
-            + 'оплаты. Начатые оплаты пройдут.')) { box2.checked = true; return; }
-        box2.disabled = true;
-        api('/payments/' + p.provider, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ on: on })
-        }).then(function (r) {
-          say(p.title + (on ? ' включён' : ' выключен'), 'ok');
-          renderPaySwitches(r);
-        }).catch(function (e) { say(e.message); box2.checked = !on; box2.disabled = false; });
-      };
-      label.appendChild(box2);
-      label.appendChild(document.createElement('span'));
-      row.appendChild(label);
-      box.appendChild(row);
+      var pill = el('div', 'meta', state);
+      pill.style.marginBottom = '14px';
+      card.appendChild(pill);
+      if (data.endpoints && data.endpoints[p.provider]) {
+        var ep = el('div', 'hint');
+        ep.style.marginBottom = '14px';
+        ep.appendChild(document.createTextNode('Адрес для ' + p.title + ': '));
+        ep.appendChild(el('code', null, data.endpoints[p.provider]));
+        card.appendChild(ep);
+      }
+      var fields = PAY_FIELDS[p.provider] || [];
+      var grid = el('div', 'row2');
+      fields.forEach(function (f) {
+        (f[2] === 'bool' ? card : grid).appendChild(payField(f[0], f[1], f[2], f[3], cfg));
+      });
+      card.insertBefore(grid, card.querySelector('.fld') || null);
+      var actions = el('div');
+      actions.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-top:4px';
+      var save = el('button', 'act', 'Сохранить');
+      save.onclick = function () { saveConfig(collect(card)); };
+      actions.appendChild(save);
+      if (p.provider === 'paynet') {
+        var gen = el('button', 'act ghost', 'Сгенерировать пароль');
+        gen.onclick = function () {
+          if (!confirm('Сгенерировать новый пароль для Paynet? Старый перестанет работать — '
+              + 'новый нужно сразу передать Paynet.')) return;
+          api('/payments/paynet-password', { method: 'POST' }).then(function (r) {
+            renderPayments(r);
+            prompt('Новый пароль Paynet — скопируйте и передайте Paynet лично. '
+                   + 'Больше он показан не будет:', r.password);
+          }).catch(function (e) { say(e.message); });
+        };
+        actions.appendChild(gen);
+      }
+      card.appendChild(actions);
+      box.appendChild(card);
     });
+
+    // общие: тестировщики и пилот
+    var common = el('div', 'pcard');
+    var hd2 = el('div', 'pcard-hd');
+    hd2.appendChild(el('div', 'ttl', 'Тестировщики'));
+    common.appendChild(hd2);
+    common.appendChild(payField('TEST_USERS', 'Telegram-id тестировщиков', 'text',
+      'Через запятую. Они видят способ в тестовом режиме и в пилоте', cfg));
+    common.appendChild(payField('TESTERS_ONLY', 'Пилот: боевой способ видят только тестировщики',
+      'bool', 'Включено — настоящая оплата открыта только им', cfg));
+    var save2 = el('button', 'act', 'Сохранить');
+    save2.onclick = function () { saveConfig(collect(common)); };
+    common.appendChild(save2);
+    box.appendChild(common);
   }
 
   // --------------------------------------------------- стоимость доставки
@@ -1038,16 +1156,18 @@
     document.getElementById('viewProducts').hidden = view !== 'products';
     document.getElementById('viewOrders').hidden = view !== 'orders';
     document.getElementById('viewSettings').hidden = view !== 'settings';
-    document.getElementById('q').hidden = view === 'settings';
+    document.getElementById('viewPayments').hidden = view !== 'payments';
+    document.getElementById('q').hidden = view === 'settings' || view === 'payments';
     document.getElementById('ttl').textContent =
       { products: 'Категории и товары', orders: 'Заказы',
-        settings: 'Состав каталога' }[view];
+        settings: 'Состав каталога', payments: 'Онлайн оплата' }[view];
     document.querySelectorAll('.nav').forEach(function (n) {
       n.classList.toggle('on', n.dataset.go === view);
     });
     say('');
     if (view === 'products') loadProducts();
     else if (view === 'orders') loadOrders();
+    else if (view === 'payments') loadPaySwitches();
     else loadSettings();
   }
 
