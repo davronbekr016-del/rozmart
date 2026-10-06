@@ -68,6 +68,7 @@ COLUMNS = [
     ("orders", "courier_taken_at", "TIMESTAMP"),
     ("orders", "courier_prev_status", "VARCHAR(20)"),
     ("orders", "delivered_at", "TIMESTAMP"),
+    ("couriers", "language", "VARCHAR(5)"),
 ]
 
 # Разовые правки данных после добавления колонок. Каждая безопасна при повторе.

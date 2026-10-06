@@ -29,16 +29,23 @@ DESCRIPTIONS = {
     ),
     "uz": (
         "🚚 ROZMART yetkazib beruvchilar boti\n\n"
-        "📦 Заказы — do'konning bo'sh buyurtmalari. «Принять заказ»ni bosing — buyurtma "
-        "sizniki, boshqalar uni endi ololmaydi.\n\n"
-        "🚚 Доставка — yo'ldagi buyurtmalaringiz: xaridor telefoni, xaritadagi manzil, "
-        "buyurtma topshirilganda «Завершить», boshqalarga qaytarish uchun «Отменить».\n\n"
+        "📦 Buyurtmalar — do'konning bo'sh buyurtmalari. «Buyurtmani qabul qilish»ni "
+        "bosing — buyurtma sizniki, boshqalar uni endi ololmaydi.\n\n"
+        "🚚 Yetkazish — yo'ldagi buyurtmalaringiz: xaridor telefoni, xaritadagi manzil, "
+        "topshirilganda «Yakunlash», boshqalarga qaytarish uchun «Bekor qilish».\n\n"
         "Har bir buyurtmada — xaridordan olinadigan summa yoki «karta orqali to'langan» "
         "belgisi, manzil va tarkib.\n\n"
         "Bot faqat xodimlar uchun. «Start»ni bosing — ruxsatni do'kon administratori beradi.",
         "ROZMART buyurtmalari yetkazib beruvchilar uchun: qabul qilish, yetkazish, "
         "belgilash. Ruxsat — administratorda.",
     ),
+}
+
+
+# меню команд: "" — для всех, "uz" — у кого Telegram на узбекском
+COMMANDS = {
+    "": ("Начать", "Свободные заказы", "Мои заказы в доставке"),
+    "uz": ("Boshlash", "Bo'sh buyurtmalar", "Yetkazishdagi buyurtmalarim"),
 }
 
 
@@ -75,11 +82,12 @@ def main() -> int:
         "allowed_updates": ["message", "callback_query"],
         "max_connections": 20,
     })
-    courier_bot.call("setMyCommands", {"commands": [
-        {"command": "start", "description": "Начать"},
-        {"command": "orders", "description": "Свободные заказы"},
-        {"command": "delivery", "description": "Мои заказы в доставке"},
-    ]})
+    for language, (start, orders, delivery) in COMMANDS.items():
+        courier_bot.call("setMyCommands", {"language_code": language, "commands": [
+            {"command": "start", "description": start},
+            {"command": "orders", "description": orders},
+            {"command": "delivery", "description": delivery},
+        ]})
     for language, (description, short) in DESCRIPTIONS.items():
         assert len(description) <= 512 and len(short) <= 120, language
         courier_bot.call("setMyDescription", {"description": description,

@@ -21,6 +21,10 @@
 с телефоном и адресом покупателя видит только тот, кого администратор
 включил в панели («Состав каталога» → «Доставщики»).
 
+Язык — по настройке Telegram у доставщика: узбекский или русский. Запоминаем
+его у доставщика, потому что часть сообщений уходит не в ответ на его
+действие — «заказ отменён» из панели или с кассы.
+
 Вебхук — /tg/courier, свой токен и свой секрет:
 `python -m scripts.setup_courier_bot`.
 """
@@ -47,26 +51,138 @@ TOKEN = os.getenv("COURIER_BOT_TOKEN", "").strip()
 SECRET = os.getenv("COURIER_WEBHOOK_SECRET", "").strip()
 WEBHOOK_PATH = "/tg/courier"
 
-BTN_ORDERS = "📦 Заказы"
-BTN_DELIVERY = "🚚 Доставка"
-KEYBOARD = {
-    "keyboard": [[{"text": BTN_ORDERS}, {"text": BTN_DELIVERY}]],
-    "resize_keyboard": True,
-    "is_persistent": True,
-}
-
 # какие заказы можно взять: принятые магазином и ещё без доставщика
 AVAILABLE = ("CONFIRMED", "ASSEMBLING", "DELIVERING")
 # сколько заказов показывать за раз: каждый — отдельное сообщение
 LIST_LIMIT = 15
 ITEMS_SHOWN = 10
 
-WELCOME = ("Это бот доставщиков ROZMART.\n\n"
-           f"«{BTN_ORDERS}» — свободные заказы, их можно принять.\n"
-           f"«{BTN_DELIVERY}» — ваши заказы в пути.")
-PENDING = ("Это бот доставщиков ROZMART.\n\n"
-           "Я вас запомнил. Чтобы видеть заказы, попросите администратора "
-           "включить вас в панели: «Состав каталога» → «Доставщики».")
+# ------------------------------------------------------------------ тексты
+# Узбекский — латиницей, как в узбекском Telegram. Адреса, имена и названия
+# товаров приходят из заказа и не переводятся.
+
+LANGS = ("ru", "uz")
+TEXTS = {
+    "ru": {
+        "btn_orders": "📦 Заказы",
+        "btn_delivery": "🚚 Доставка",
+        "welcome": "Это бот доставщиков ROZMART.\n\n"
+                   "«{orders}» — свободные заказы, их можно принять.\n"
+                   "«{delivery}» — ваши заказы в пути.",
+        "pending": "Это бот доставщиков ROZMART.\n\n"
+                   "Я вас запомнил. Чтобы видеть заказы, попросите администратора "
+                   "включить вас в панели: «Состав каталога» → «Доставщики».",
+        "granted": "Доступ к заказам включён.",
+        "sum": "сум",
+        "paid": "💳 <b>ОПЛАЧЕНО КАРТОЙ — деньги не брать</b>",
+        "collect": "💵 Получить с покупателя: <b>{sum}</b>",
+        "more": "…и ещё {n}",
+        "take": "✅ Принять заказ",
+        "done": "✔️ Завершить",
+        "drop": "↩️ Отменить",
+        "map": "📍 Открыть на карте",
+        "yes_done": "Да, заказ доставлен",
+        "yes_drop": "Да, отказаться от заказа",
+        "back": "Назад",
+        "none_free": "Свободных заказов нет.",
+        "free": "Свободные заказы: {n}",
+        "none_mine": "У вас нет заказов в доставке. Взять — в «{orders}».",
+        "mine": "Ваши заказы в доставке: {n}",
+        "no_access": "Нет доступа. Попросите администратора включить вас в панели.",
+        "gone": "Заказа больше нет.",
+        "deleted": "Заказ удалён.",
+        "taken": "✅ Заказ {number} принят — он в разделе «{delivery}»",
+        "taken_note": "✅ <b>Вы приняли заказ.</b> Он в разделе «{delivery}».",
+        "already_yours": "Этот заказ уже ваш",
+        "taken_by_other": "Не получилось: заказ уже взял другой доставщик.",
+        "unavailable": "Заказ уже недоступен.",
+        "unavailable_note": "⛔ Заказ уже недоступен.",
+        "not_yours": "Этот заказ уже не у вас.",
+        "not_yours_note": "⛔ Заказ уже не у вас.",
+        "not_yours_changed": "Заказ уже не у вас — его отменили или изменили.",
+        "ask_done": "Покупатель получил заказ?",
+        "ask_drop": "Отказаться от заказа? Он снова станет свободным для всех.",
+        "done_ok": "Заказ выполнен",
+        "done_note": "✅ <b>Доставлен.</b>",
+        "dropped": "Вы отказались от заказа",
+        "dropped_note": "↩️ Вы отказались от заказа. Он снова свободен для всех.",
+        "canceled": "❌ Заказ <b>{number}</b> отменён — не везите.\n{customer} · {address}",
+    },
+    "uz": {
+        "btn_orders": "📦 Buyurtmalar",
+        "btn_delivery": "🚚 Yetkazish",
+        "welcome": "Bu ROZMART yetkazib beruvchilar boti.\n\n"
+                   "«{orders}» — bo'sh buyurtmalar, ularni qabul qilish mumkin.\n"
+                   "«{delivery}» — yo'ldagi buyurtmalaringiz.",
+        "pending": "Bu ROZMART yetkazib beruvchilar boti.\n\n"
+                   "Sizni eslab qoldim. Buyurtmalarni ko'rish uchun administratordan sizni "
+                   "panelda yoqib qo'yishni so'rang: «Состав каталога» → «Доставщики».",
+        "granted": "Buyurtmalarga ruxsat berildi.",
+        "sum": "so'm",
+        "paid": "💳 <b>KARTA ORQALI TO'LANGAN — pul olinmasin</b>",
+        "collect": "💵 Xaridordan olinadi: <b>{sum}</b>",
+        "more": "…yana {n} ta",
+        "take": "✅ Buyurtmani qabul qilish",
+        "done": "✔️ Yakunlash",
+        "drop": "↩️ Bekor qilish",
+        "map": "📍 Xaritada ochish",
+        "yes_done": "Ha, buyurtma topshirildi",
+        "yes_drop": "Ha, buyurtmadan voz kechaman",
+        "back": "Orqaga",
+        "none_free": "Bo'sh buyurtmalar yo'q.",
+        "free": "Bo'sh buyurtmalar: {n}",
+        "none_mine": "Yetkazishda buyurtmangiz yo'q. Olish uchun — «{orders}».",
+        "mine": "Yetkazishdagi buyurtmalaringiz: {n}",
+        "no_access": "Ruxsat yo'q. Administratordan sizni panelda yoqib qo'yishni so'rang.",
+        "gone": "Bu buyurtma endi yo'q.",
+        "deleted": "Buyurtma o'chirilgan.",
+        "taken": "✅ {number} buyurtma qabul qilindi — u «{delivery}» bo'limida",
+        "taken_note": "✅ <b>Siz buyurtmani qabul qildingiz.</b> U «{delivery}» bo'limida.",
+        "already_yours": "Bu buyurtma allaqachon sizniki",
+        "taken_by_other": "Bo'lmadi: buyurtmani boshqa yetkazib beruvchi olib bo'ldi.",
+        "unavailable": "Buyurtma endi mavjud emas.",
+        "unavailable_note": "⛔ Buyurtma endi mavjud emas.",
+        "not_yours": "Bu buyurtma endi sizda emas.",
+        "not_yours_note": "⛔ Buyurtma endi sizda emas.",
+        "not_yours_changed": "Buyurtma endi sizda emas — uni bekor qilishgan yoki o'zgartirishgan.",
+        "ask_done": "Xaridor buyurtmani oldimi?",
+        "ask_drop": "Buyurtmadan voz kechasizmi? U yana hamma uchun bo'sh bo'ladi.",
+        "done_ok": "Buyurtma bajarildi",
+        "done_note": "✅ <b>Topshirildi.</b>",
+        "dropped": "Siz buyurtmadan voz kechdingiz",
+        "dropped_note": "↩️ Siz buyurtmadan voz kechdingiz. U yana hamma uchun bo'sh.",
+        "canceled": "❌ <b>{number}</b> buyurtma bekor qilindi — olib bormang.\n"
+                    "{customer} · {address}",
+    },
+}
+
+# Кнопки внизу — обычный текст: что бы ни пришло, узнаём на любом языке.
+# Человек мог сменить язык Telegram, а клавиатура у него осталась прежняя
+ORDERS_BUTTONS = {TEXTS[lang]["btn_orders"] for lang in LANGS} | {"/orders"}
+DELIVERY_BUTTONS = {TEXTS[lang]["btn_delivery"] for lang in LANGS} | {"/delivery"}
+
+
+def t(lang: str, key: str, **values) -> str:
+    texts = TEXTS.get(lang) or TEXTS["ru"]
+    base = {"orders": texts["btn_orders"], "delivery": texts["btn_delivery"]}
+    return texts[key].format(**{**base, **values})
+
+
+def lang_of(sender: dict) -> str:
+    """Язык по настройке Telegram: узбекский — у кого Telegram на узбекском."""
+    return "uz" if (sender.get("language_code") or "").lower().startswith("uz") else "ru"
+
+
+def keyboard(lang: str) -> dict:
+    return {
+        "keyboard": [[{"text": t(lang, "btn_orders")}, {"text": t(lang, "btn_delivery")}]],
+        "resize_keyboard": True,
+        "is_persistent": True,
+    }
+
+
+def money(lang: str, value: int) -> str:
+    return f"{value:,}".replace(",", " ") + " " + t(lang, "sum")
 
 
 def enabled() -> bool:
@@ -126,13 +242,11 @@ def map_url(order: Order) -> str:
     return "https://maps.google.com/?q=" + quote(order.address)
 
 
-def card(order: Order) -> str:
+def card(order: Order, lang: str) -> str:
     """Всё, что нужно доставщику: деньги, кому, куда, когда и что везти."""
-    if order.paid_at is not None:
-        money = "💳 <b>ОПЛАЧЕНО КАРТОЙ — деньги не брать</b>"
-    else:
-        money = f"💵 Получить с покупателя: <b>{notify.money(order.total)}</b>"
-    lines = [f"📦 <b>{notify.esc(order.number)}</b> — {notify.money(order.total)}", money, "",
+    money_line = (t(lang, "paid") if order.paid_at is not None
+                  else t(lang, "collect", sum=money(lang, order.total)))
+    lines = [f"📦 <b>{notify.esc(order.number)}</b> — {money(lang, order.total)}", money_line, "",
              f"👤 {notify.esc(order.customer_name)} · {notify.esc(order.phone)}"]
     if order.telegram_username:
         lines[-1] += f" · @{notify.esc(order.telegram_username)}"
@@ -144,27 +258,27 @@ def card(order: Order) -> str:
         count = f" × {item.quantity}" if item.quantity > 1 else ""
         lines.append(f"• {notify.esc(item.product_name)} {notify.esc(item.weight)}{count}")
     if len(order.items) > ITEMS_SHOWN:
-        lines.append(f"…и ещё {len(order.items) - ITEMS_SHOWN}")
+        lines.append(t(lang, "more", n=len(order.items) - ITEMS_SHOWN))
     return "\n".join(lines)
 
 
-def take_markup(order: Order) -> dict:
-    return {"inline_keyboard": [[{"text": "✅ Принять заказ", "callback_data": f"take:{order.id}"}]]}
+def take_markup(order: Order, lang: str) -> dict:
+    return {"inline_keyboard": [[{"text": t(lang, "take"), "callback_data": f"take:{order.id}"}]]}
 
 
-def delivery_markup(order: Order) -> dict:
+def delivery_markup(order: Order, lang: str) -> dict:
     return {"inline_keyboard": [
-        [{"text": "✔️ Завершить", "callback_data": f"done:{order.id}"},
-         {"text": "↩️ Отменить", "callback_data": f"drop:{order.id}"}],
-        [{"text": "📍 Открыть на карте", "url": map_url(order)}],
+        [{"text": t(lang, "done"), "callback_data": f"done:{order.id}"},
+         {"text": t(lang, "drop"), "callback_data": f"drop:{order.id}"}],
+        [{"text": t(lang, "map"), "url": map_url(order)}],
     ]}
 
 
-def confirm_markup(order: Order, action: str) -> dict:
-    yes = "Да, заказ доставлен" if action == "done" else "Да, отказаться от заказа"
+def confirm_markup(order: Order, action: str, lang: str) -> dict:
     return {"inline_keyboard": [
-        [{"text": yes, "callback_data": f"{action}!:{order.id}"}],
-        [{"text": "Назад", "callback_data": f"back:{order.id}"}],
+        [{"text": t(lang, "yes_done" if action == "done" else "yes_drop"),
+          "callback_data": f"{action}!:{order.id}"}],
+        [{"text": t(lang, "back"), "callback_data": f"back:{order.id}"}],
     ]}
 
 
@@ -190,24 +304,24 @@ def mine(db: Session, telegram_id: int) -> list[Order]:
     ))
 
 
-def show_orders(db: Session, chat_id: int) -> None:
+def show_orders(db: Session, chat_id: int, lang: str) -> None:
     orders = available(db)
     if not orders:
-        send(chat_id, "Свободных заказов нет.", KEYBOARD)
+        send(chat_id, t(lang, "none_free"), keyboard(lang))
         return
-    send(chat_id, f"Свободные заказы: {len(orders)}", KEYBOARD)
+    send(chat_id, t(lang, "free", n=len(orders)), keyboard(lang))
     for order in orders:
-        send(chat_id, card(order), take_markup(order))
+        send(chat_id, card(order, lang), take_markup(order, lang))
 
 
-def show_delivery(db: Session, chat_id: int) -> None:
+def show_delivery(db: Session, chat_id: int, lang: str) -> None:
     orders = mine(db, chat_id)
     if not orders:
-        send(chat_id, f"У вас нет заказов в доставке. Взять — в «{BTN_ORDERS}».", KEYBOARD)
+        send(chat_id, t(lang, "none_mine"), keyboard(lang))
         return
-    send(chat_id, f"Ваши заказы в доставке: {len(orders)}", KEYBOARD)
+    send(chat_id, t(lang, "mine", n=len(orders)), keyboard(lang))
     for order in orders:
-        send(chat_id, card(order), delivery_markup(order))
+        send(chat_id, card(order, lang), delivery_markup(order, lang))
 
 
 # ------------------------------------------------------------------ действия
@@ -267,7 +381,8 @@ def release_all(db: Session, courier_id: int) -> list[str]:
 
 
 def staff(db: Session, background: BackgroundTasks | None, order: Order, text: str) -> None:
-    """Сообщение сотрудникам в служебный бот: кто взял, кто доставил."""
+    """Сообщение сотрудникам в служебный бот: кто взял, кто доставил.
+    Служебный бот общий для магазина — по-русски."""
     rows = notify.queue_staff(db, order, text)
     if not rows:
         return
@@ -281,13 +396,32 @@ def staff(db: Session, background: BackgroundTasks | None, order: Order, text: s
         notify.send_many(ids)
 
 
+def language(courier_id: int) -> str:
+    """Язык доставщика — для сообщений не в ответ на его действие."""
+    from app.db import SessionLocal
+
+    db = SessionLocal()
+    try:
+        courier = db.get(Courier, courier_id)
+        return (courier.language if courier and courier.language in LANGS else "ru")
+    finally:
+        db.close()
+
+
+def access_granted(courier: Courier) -> None:
+    lang = courier.language if courier.language in LANGS else "ru"
+    send(courier.telegram_id, t(lang, "granted") + "\n\n" + t(lang, "welcome"), keyboard(lang))
+
+
 def order_canceled(order: Order) -> None:
     """Заказ отменили в панели или на кассе, а он у доставщика в пути —
     сказать ему, чтобы не вёз."""
     if not enabled() or not order.courier_id:
         return
-    send(order.courier_id, f"❌ Заказ <b>{notify.esc(order.number)}</b> отменён — не везите.\n"
-                           f"{notify.esc(order.customer_name)} · {notify.esc(order.address)}")
+    lang = language(order.courier_id)
+    send(order.courier_id, t(lang, "canceled", number=notify.esc(order.number),
+                             customer=notify.esc(order.customer_name),
+                             address=notify.esc(order.address)))
 
 
 # ------------------------------------------------------------------ обработка
@@ -324,6 +458,7 @@ def answer(callback_id: str, text: str = "", alert: bool = False) -> None:
 
 
 def remember(db: Session, sender: dict) -> Courier:
+    """Запоминает написавшего — без доступа — и его язык."""
     name = " ".join(filter(None, [sender.get("first_name"), sender.get("last_name")])) \
         or str(sender["id"])
     username = (sender.get("username") or "").strip() or None
@@ -333,6 +468,7 @@ def remember(db: Session, sender: dict) -> Courier:
         db.add(courier)
     else:
         courier.name, courier.username = name, username or courier.username
+    courier.language = lang_of(sender)
     db.commit()
     return courier
 
@@ -343,16 +479,17 @@ def handle_message(db: Session, message: dict) -> None:
     if chat.get("type") != "private" or not sender.get("id"):
         return                      # бот личный: в группах ему делать нечего
     courier = remember(db, sender)
+    lang = courier.language
     if not courier.active:
-        send(chat["id"], PENDING)
+        send(chat["id"], t(lang, "pending"))
         return
     text = (message.get("text") or "").strip()
-    if text in (BTN_ORDERS, "/orders"):
-        show_orders(db, chat["id"])
-    elif text in (BTN_DELIVERY, "/delivery"):
-        show_delivery(db, chat["id"])
+    if text in ORDERS_BUTTONS:
+        show_orders(db, chat["id"], lang)
+    elif text in DELIVERY_BUTTONS:
+        show_delivery(db, chat["id"], lang)
     else:
-        send(chat["id"], WELCOME, KEYBOARD)
+        send(chat["id"], t(lang, "welcome"), keyboard(lang))
 
 
 def handle_callback(db: Session, background: BackgroundTasks, query: dict) -> None:
@@ -362,10 +499,14 @@ def handle_callback(db: Session, background: BackgroundTasks, query: dict) -> No
     chat_id = (message.get("chat") or {}).get("id")
     message_id = message.get("message_id")
     action, _, raw_id = (query.get("data") or "").partition(":")
+    lang = lang_of(sender)
     courier = courier_of(db, sender.get("id") or 0)
     if courier is None:
-        answer(callback_id, "Нет доступа. Попросите администратора включить вас в панели.", True)
+        answer(callback_id, t(lang, "no_access"), True)
         return
+    if courier.language != lang:
+        courier.language = lang         # сменил язык Telegram — следуем за ним
+        db.commit()
     try:
         order_id = int(raw_id)
     except ValueError:
@@ -378,8 +519,8 @@ def handle_callback(db: Session, background: BackgroundTasks, query: dict) -> No
 
     order = current()
     if order is None:
-        answer(callback_id, "Заказа больше нет.", True)
-        edit(chat_id, message_id, "Заказ удалён.", None)
+        answer(callback_id, t(lang, "gone"), True)
+        edit(chat_id, message_id, t(lang, "deleted"), None)
         return
 
     if action == "take":
@@ -387,68 +528,68 @@ def handle_callback(db: Session, background: BackgroundTasks, query: dict) -> No
             order = current()
             # Принятый заказ из списка свободных убираем: в чате остаются
             # только те, что ещё можно взять. Он теперь в «Доставке»
-            answer(callback_id, f"✅ Заказ {order.number} принят — он в разделе «{BTN_DELIVERY}»",
-                   True)
-            remove(chat_id, message_id, card(order) + "\n\n✅ <b>Вы приняли заказ.</b> "
-                   f"Он в разделе «{BTN_DELIVERY}».")
+            answer(callback_id, t(lang, "taken", number=order.number), True)
+            remove(chat_id, message_id, card(order, lang) + "\n\n" + t(lang, "taken_note"))
             staff(db, background, order, f"🚚 Заказ <b>{notify.esc(order.number)}</b> "
                                          f"взял доставщик {notify.esc(courier.name)}")
             log.info("Заказ %s взял доставщик %s", order.number, courier.telegram_id)
         else:
             order = current()
             if order.courier_id == courier.telegram_id and order.status == "DELIVERING":
-                answer(callback_id, "Этот заказ уже ваш")
-                edit(chat_id, message_id, card(order), delivery_markup(order))
+                answer(callback_id, t(lang, "already_yours"))
+                edit(chat_id, message_id, card(order, lang), delivery_markup(order, lang))
                 return
-            answer(callback_id, "Не получилось: заказ уже взял другой доставщик."
-                   if order.courier_id else "Заказ уже недоступен.", True)
-            remove(chat_id, message_id, card(order) + "\n\n⛔ Заказ уже недоступен.")
+            answer(callback_id, t(lang, "taken_by_other" if order.courier_id else "unavailable"),
+                   True)
+            remove(chat_id, message_id, card(order, lang) + "\n\n" + t(lang, "unavailable_note"))
         return
 
     if action in ("done", "drop"):
         if order.courier_id != courier.telegram_id or order.status != "DELIVERING":
-            answer(callback_id, "Этот заказ уже не у вас.", True)
-            edit(chat_id, message_id, card(order) + "\n\n⛔ Заказ уже не у вас.", None)
+            answer(callback_id, t(lang, "not_yours"), True)
+            edit(chat_id, message_id, card(order, lang) + "\n\n" + t(lang, "not_yours_note"), None)
             return
-        question = ("Покупатель получил заказ?" if action == "done"
-                    else "Отказаться от заказа? Он снова станет свободным для всех.")
         answer(callback_id)
-        edit(chat_id, message_id, card(order) + f"\n\n❓ <b>{question}</b>",
-             confirm_markup(order, action))
+        question = t(lang, "ask_done" if action == "done" else "ask_drop")
+        edit(chat_id, message_id, card(order, lang) + f"\n\n❓ <b>{question}</b>",
+             confirm_markup(order, action, lang))
         return
 
     if action == "back":
         answer(callback_id)
         mine_now = order.courier_id == courier.telegram_id and order.status == "DELIVERING"
-        edit(chat_id, message_id, card(order), delivery_markup(order) if mine_now else None)
+        edit(chat_id, message_id, card(order, lang),
+             delivery_markup(order, lang) if mine_now else None)
         return
 
     if action == "done!":
         if finish(db, order_id, courier):
             order = current()
-            answer(callback_id, "Заказ выполнен")
-            edit(chat_id, message_id, card(order) + "\n\n✅ <b>Доставлен.</b>", None)
+            answer(callback_id, t(lang, "done_ok"))
+            edit(chat_id, message_id, card(order, lang) + "\n\n" + t(lang, "done_note"), None)
             cash = "" if order.paid_at else f" Получено наличными: {notify.money(order.total)}."
             staff(db, background, order, f"✅ Заказ <b>{notify.esc(order.number)}</b> доставлен — "
                                          f"{notify.esc(courier.name)}.{cash}")
             log.info("Заказ %s доставлен, доставщик %s", order.number, courier.telegram_id)
         else:
-            answer(callback_id, "Заказ уже не у вас — его отменили или изменили.", True)
-            edit(chat_id, message_id, card(current()) + "\n\n⛔ Заказ уже не у вас.", None)
+            answer(callback_id, t(lang, "not_yours_changed"), True)
+            edit(chat_id, message_id,
+                 card(current(), lang) + "\n\n" + t(lang, "not_yours_note"), None)
         return
 
     if action == "drop!":
         if release(db, order_id, courier.telegram_id):
             order = current()
-            answer(callback_id, "Вы отказались от заказа")
-            edit(chat_id, message_id, card(order) + "\n\n↩️ Вы отказались от заказа. "
-                 "Он снова свободен для всех.", None)
-            staff(db, background, order, f"↩️ Доставщик {notify.esc(courier.name)} отказался "
-                                         f"от заказа <b>{notify.esc(order.number)}</b> — заказ снова свободен")
+            answer(callback_id, t(lang, "dropped"))
+            edit(chat_id, message_id, card(order, lang) + "\n\n" + t(lang, "dropped_note"), None)
+            staff(db, background, order,
+                  f"↩️ Доставщик {notify.esc(courier.name)} отказался от заказа "
+                  f"<b>{notify.esc(order.number)}</b> — заказ снова свободен")
             log.info("Доставщик %s отказался от заказа %s", courier.telegram_id, order.number)
         else:
-            answer(callback_id, "Заказ уже не у вас.", True)
-            edit(chat_id, message_id, card(current()) + "\n\n⛔ Заказ уже не у вас.", None)
+            answer(callback_id, t(lang, "not_yours"), True)
+            edit(chat_id, message_id,
+                 card(current(), lang) + "\n\n" + t(lang, "not_yours_note"), None)
         return
 
     answer(callback_id)

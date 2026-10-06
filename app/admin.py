@@ -820,8 +820,7 @@ def grant_courier(telegram_id: int, db: Session = Depends(get_db),
     courier.active = True
     db.commit()
     log.info("Доставщику %s (%s) выдан доступ", telegram_id, courier.name)
-    courier_bot.send(telegram_id, "Доступ к заказам включён.\n\n" + courier_bot.WELCOME,
-                     courier_bot.KEYBOARD)
+    courier_bot.access_granted(courier)
     return {"telegram_id": telegram_id, "access": True}
 
 

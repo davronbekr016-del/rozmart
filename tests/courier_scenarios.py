@@ -327,6 +327,50 @@ order_of = [m for t, m, p in sent]
 check(13, "Сначала убирается сообщение доставщика, потом — сотрудникам",
       bool(order_of) and order_of[0] == "deleteMessage", order_of)
 
+# ------------------------------------------------------------ узбекский
+C = 503
+
+
+def say_uz(text):
+    sent.clear()
+    hook({"message": {"message_id": 1, "chat": {"id": C, "type": "private"},
+                      "from": {"id": C, "first_name": "Kuryer", "language_code": "uz"},
+                      "text": text}})
+    return [p for t, m, p in sent if t == "333:courier-token"]
+
+
+out = say_uz("/start")
+check(14, "Telegram на узбекском — бот отвечает по-узбекски", "yetkazib beruvchilar boti" in out[0]["text"])
+sent.clear()
+client.post(f"/api/admin/couriers/{C}", headers=ADMIN)
+welcome = [p for t, m, p in sent if t == "333:courier-token" and p.get("chat_id") == C]
+check(14, "Кнопки внизу — по-узбекски",
+      welcome and welcome[0]["reply_markup"]["keyboard"] == [[{"text": "📦 Buyurtmalar"},
+                                                             {"text": "🚚 Yetkazish"}]]
+      and "Buyurtmalarga ruxsat berildi" in welcome[0]["text"])
+cash6 = order("courier-key-007")
+out = say_uz("📦 Buyurtmalar")
+cards = [p for p in out if (p.get("reply_markup") or {}).get("inline_keyboard")]
+mine6 = next((p for p in cards if cash6 in p["text"]), None)
+check(14, "Карточка и кнопка под заказом — по-узбекски",
+      mine6 and "Xaridordan olinadi" in mine6["text"] and "so'm" in mine6["text"]
+      and mine6["reply_markup"]["inline_keyboard"][0][0]["text"] == "✅ Buyurtmani qabul qilish")
+sent.clear()
+r = hook({"callback_query": {"id": "cb-uz", "data": f"take:{row(cash6).id}",
+                             "from": {"id": C, "first_name": "Kuryer", "language_code": "uz"},
+                             "message": {"message_id": 91, "chat": {"id": C, "type": "private"}}}})
+check(14, "Ответ на «принять» — по-узбекски", "qabul qilindi" in r.json().get("text", ""))
+delivery = [p for p in say_uz("🚚 Yetkazish") if (p.get("reply_markup") or {}).get("inline_keyboard")]
+check(14, "«Yakunlash», «Bekor qilish», «Xaritada ochish»",
+      delivery and [b["text"] for row_ in delivery[0]["reply_markup"]["inline_keyboard"] for b in row_]
+      == ["✔️ Yakunlash", "↩️ Bekor qilish", "📍 Xaritada ochish"])
+sent.clear()
+client.patch(f"/api/admin/orders/{row(cash6).id}/status", json={"status": "CANCELED"}, headers=ADMIN)
+told = [p for t, m, p in sent if t == "333:courier-token" and p.get("chat_id") == C]
+check(14, "Отмена из панели — тоже на его языке", told and "bekor qilindi" in told[0]["text"])
+check(14, "Русская кнопка у узбекского доставщика тоже работает",
+      any("buyurtma" in p["text"].lower() for p in say_uz("📦 Заказы")))
+
 failed = [r for r in results if not r[2]]
 print(f"\nИтого проверок: {len(results)}, не прошло: {len(failed)}")
 sys.exit(1 if failed else 0)

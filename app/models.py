@@ -331,6 +331,9 @@ class Courier(Base):
     telegram_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     name: Mapped[str] = mapped_column(String(200))
     username: Mapped[str | None] = mapped_column(String(64))
+    # язык Telegram у доставщика: "uz" или "ru". Нужен для сообщений не в ответ
+    # на его действие — «заказ отменён» из панели или с кассы
+    language: Mapped[str | None] = mapped_column(String(5))
     active: Mapped[bool] = mapped_column(default=False, server_default=false())
     added_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 

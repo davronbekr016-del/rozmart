@@ -711,7 +711,7 @@ python -m scripts.setup_bot --remove отключить
 
 Настройка: `python -m scripts.setup_courier_bot` (нужны `COURIER_BOT_TOKEN`,
 `COURIER_WEBHOOK_SECRET`, `PUBLIC_URL`). Проверки — `tests/courier_scenarios.py`,
-39 штук.
+48 штук. Язык — по настройке Telegram доставщика: узбекский или русский.
 
 ## Административная панель
 
