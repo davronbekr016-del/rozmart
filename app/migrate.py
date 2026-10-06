@@ -70,6 +70,12 @@ COLUMNS = [
     ("orders", "delivered_at", "TIMESTAMP"),
     ("couriers", "language", "VARCHAR(5)"),
     ("staff_chats", "language", "VARCHAR(5)"),
+    # причина отказа доставщика
+    ("orders", "courier_drop_note", "TEXT"),
+    ("orders", "courier_drop_by", "VARCHAR(200)"),
+    ("orders", "courier_drop_at", "TIMESTAMP"),
+    ("couriers", "pending_drop_order_id", "INTEGER"),
+    ("couriers", "pending_drop_message_id", "BIGINT"),
 ]
 
 # Разовые правки данных после добавления колонок. Каждая безопасна при повторе.

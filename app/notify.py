@@ -214,6 +214,7 @@ STAFF_TEXTS = {
         "delivered": "✅ Заказ <b>{number}</b> доставлен — {courier}.",
         "cash_got": " Получено наличными: {total}.",
         "dropped": "↩️ Доставщик {courier} отказался от заказа <b>{number}</b> — заказ снова свободен",
+        "drop_reason": "💬 Причина: {reason}",
         "courier_off": "↩️ Доставщик {courier} отключён — заказ <b>{number}</b> снова свободен",
         "refund": "↩️ Возврат через Payme по заказу <b>{number}</b> — {total} вернутся покупателю.",
         "refund_canceled": "Заказ отменён — не собирать и не выдавать.",
@@ -250,6 +251,7 @@ STAFF_TEXTS = {
         "cash_got": " Naqd olindi: {total}.",
         "dropped": "↩️ Yetkazib beruvchi {courier} <b>{number}</b> buyurtmadan voz kechdi — "
                    "buyurtma yana bo'sh",
+        "drop_reason": "💬 Sabab: {reason}",
         "courier_off": "↩️ Yetkazib beruvchi {courier} o'chirildi — <b>{number}</b> buyurtma yana bo'sh",
         "refund": "↩️ <b>{number}</b> buyurtma bo'yicha Payme orqali qaytarish — {total} "
                   "xaridorga qaytariladi.",

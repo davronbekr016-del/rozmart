@@ -247,6 +247,11 @@ class Order(Base):
     courier_taken_at: Mapped[datetime | None] = mapped_column(DateTime)
     courier_prev_status: Mapped[str | None] = mapped_column(String(20))
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # последний отказ доставщика: кто и почему. Причину он пишет в боте,
+    # иначе отказ не проходит — магазину нужно знать, что с заказом не так
+    courier_drop_note: Mapped[str | None] = mapped_column(Text)
+    courier_drop_by: Mapped[str | None] = mapped_column(String(200))
+    courier_drop_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     # Выгрузка в REGOS. Отправка идёт после оформления и вне запроса покупателя:
     # недоступная учётная система не должна мешать людям заказывать.
@@ -334,6 +339,10 @@ class Courier(Base):
     # язык Telegram у доставщика: "uz" или "ru". Нужен для сообщений не в ответ
     # на его действие — «заказ отменён» из панели или с кассы
     language: Mapped[str | None] = mapped_column(String(5))
+    # доставщик нажал «Отменить» и бот ждёт от него причину: какой заказ
+    # и какое сообщение с карточкой потом поправить
+    pending_drop_order_id: Mapped[int | None]
+    pending_drop_message_id: Mapped[int | None] = mapped_column(BigInteger)
     active: Mapped[bool] = mapped_column(default=False, server_default=false())
     added_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 

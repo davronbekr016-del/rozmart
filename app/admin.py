@@ -202,6 +202,9 @@ class OrderDetail(OrderRow):
     courier_name: str | None = None
     courier_taken_at: str | None = None
     delivered_at: str | None = None
+    # последний отказ доставщика и его причина
+    courier_drop_note: str | None = None
+    courier_drop_by: str | None = None
     address: str
     delivery_slot: str
     comment: str | None
@@ -533,6 +536,8 @@ def get_order(
                           if order.courier_taken_at else None),
         delivered_at=(order.delivered_at.replace(tzinfo=timezone.utc).isoformat()
                       if order.delivered_at else None),
+        courier_drop_note=order.courier_drop_note,
+        courier_drop_by=order.courier_drop_by,
         regos_error=order.regos_error,
         regos_attempts=order.regos_attempts,
         address=order.address,

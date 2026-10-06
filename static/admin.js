@@ -430,6 +430,8 @@
             + (o.delivered_at ? ' · доставил ' + new Date(o.delivered_at).toLocaleString('ru-RU') : '')
           : '—'],
        ['Комментарий', o.comment || '—'],
+       ['Отказ доставщика', o.courier_drop_note
+          ? (o.courier_drop_by || 'доставщик') + ': ' + o.courier_drop_note : '—'],
        ['Оформлен', new Date(o.created_at).toLocaleString('ru-RU')]
       ].forEach(function (pair) {
         var f = el('div', 'fld');

@@ -229,17 +229,42 @@ check(6, "У первого он в «Доставке»", any(cash1 in p["text"
 
 # ------------------------------------------------------------ отказ
 calls = press(A, f"drop:{oid}")
-check(7, "«Отменить» сначала переспрашивает", row(cash1).courier_id == A
-      and "Отказаться от заказа?" in edited(calls)["text"])
+asked = [p for m, p in calls if m == "sendMessage"]
+check(7, "«Отменить» просит написать причину, заказ пока за доставщиком",
+      row(cash1).courier_id == A and "Почему отказываетесь?" in edited(calls)["text"]
+      and asked and asked[0]["reply_markup"].get("force_reply") is True)
 press(A, f"back:{oid}")
-check(7, "«Назад» ничего не меняет", row(cash1).courier_id == A)
+check(7, "«Назад» — отказ отменён, заказ его", row(cash1).courier_id == A)
+out = say(A, "Пробка")
+check(7, "После «Назад» обычное сообщение — не причина отказа", row(cash1).courier_id == A)
+
 press(A, f"drop:{oid}")
-calls = press(A, f"drop!:{oid}")
+say(A, "📦 Заказы")
+out = say(A, "Колесо спустило")
+check(7, "Ушёл в другой раздел — отказ забыт, заказ его", row(cash1).courier_id == A)
+
+press(A, f"drop:{oid}")
+out = say(A, "ок")
+check(7, "Слишком короткая причина — просит подробнее", row(cash1).courier_id == A
+      and any("подробнее" in p["text"] for p in out))
+sent.clear()
+hook({"message": {"message_id": 5, "chat": {"id": A, "type": "private"},
+                  "from": {"id": A, "first_name": "Курьер501"}, "text": "Колесо спустило, не успею"}})
+out = [(m, p) for t, m, p in sent if t == "333:courier-token"]
 got = row(cash1)
-check(7, "Отказался — заказ свободен и снова «Принят»", got.courier_id is None
+check(7, "Написал причину — заказ свободен и снова «Принят»", got.courier_id is None
       and got.status == "CONFIRMED" and got.courier_prev_status is None)
+check(7, "Причина сохранена в заказе", got.courier_drop_note == "Колесо спустило, не успею"
+      and got.courier_drop_by == "Курьер501")
+check(7, "Карточка в чате поправлена, причина видна доставщику",
+      any(m == "editMessageText" and "Колесо спустило" in p["text"] for m, p in out)
+      and any(m == "sendMessage" and "Колесо спустило" in p["text"] for m, p in out))
 check(7, "Его снова видят все", any(cash1 in p["text"] for p in say(B, "📦 Заказы")))
-check(7, "Сотрудникам — что доставщик отказался", any("отказался" in t for t in staff_texts()))
+check(7, "Сотрудникам — кто отказался и почему",
+      any("отказался" in t and "Причина: Колесо спустило, не успею" in t for t in staff_texts()))
+detail = client.get(f"/api/admin/orders/{oid}", headers=ADMIN).json()
+check(7, "В панели видна причина отказа", detail["courier_drop_note"] == "Колесо спустило, не успею"
+      and detail["courier_drop_by"] == "Курьер501")
 
 # ------------------------------------------------------------ завершение
 press(B, f"take:{oid}")
@@ -281,7 +306,8 @@ s.query(Order).filter_by(number=cash3).update({"status": "DELIVERING"}); s.commi
 check(10, "«В доставке» без доставщика — свободен", any(cash3 in p["text"] for p in say(A, "📦 Заказы")))
 o3 = row(cash3).id
 press(A, f"take:{o3}")
-press(A, f"drop!:{o3}")
+press(A, f"drop!:{o3}")          # кнопка из старых сообщений — тоже через причину
+say(A, "Машина сломалась")
 check(10, "Отказ возвращает «В доставке» и свободным", row(cash3).status == "DELIVERING"
       and row(cash3).courier_id is None)
 

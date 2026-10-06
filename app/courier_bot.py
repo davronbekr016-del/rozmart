@@ -105,7 +105,14 @@ TEXTS = {
         "done_ok": "Заказ выполнен",
         "done_note": "✅ <b>Доставлен.</b>",
         "dropped": "Вы отказались от заказа",
-        "dropped_note": "↩️ Вы отказались от заказа. Он снова свободен для всех.",
+        "dropped_note": "↩️ Вы отказались от заказа. Он снова свободен для всех.\n💬 {reason}",
+        "ask_reason_card": "❓ <b>Почему отказываетесь?</b> Напишите причину сообщением — "
+                           "без неё отказ не принимается.",
+        "ask_reason": "✍️ Напишите одним сообщением, почему отказываетесь от заказа {number}. "
+                      "После этого он станет свободным для других.",
+        "reason_ph": "Причина отказа",
+        "reason_short": "Напишите причину чуть подробнее — хотя бы пару слов.",
+        "drop_kept": "Отказ отменён — заказ по-прежнему ваш.",
         "canceled": "❌ Заказ <b>{number}</b> отменён — не везите.\n{customer} · {address}",
     },
     "uz": {
@@ -150,7 +157,14 @@ TEXTS = {
         "done_ok": "Buyurtma bajarildi",
         "done_note": "✅ <b>Topshirildi.</b>",
         "dropped": "Siz buyurtmadan voz kechdingiz",
-        "dropped_note": "↩️ Siz buyurtmadan voz kechdingiz. U yana hamma uchun bo'sh.",
+        "dropped_note": "↩️ Siz buyurtmadan voz kechdingiz. U yana hamma uchun bo'sh.\n💬 {reason}",
+        "ask_reason_card": "❓ <b>Nega voz kechyapsiz?</b> Sababini xabar qilib yozing — "
+                           "sababsiz voz kechish qabul qilinmaydi.",
+        "ask_reason": "✍️ {number} buyurtmadan nega voz kechayotganingizni bitta xabarda yozing. "
+                      "Shundan so'ng u boshqalar uchun bo'sh bo'ladi.",
+        "reason_ph": "Voz kechish sababi",
+        "reason_short": "Sababini biroz batafsilroq yozing — kamida bir-ikki so'z.",
+        "drop_kept": "Voz kechish bekor qilindi — buyurtma hamon sizniki.",
         "canceled": "❌ <b>{number}</b> buyurtma bekor qilindi — olib bormang.\n"
                     "{customer} · {address}",
     },
@@ -353,17 +367,22 @@ def finish(db: Session, order_id: int, courier: Courier) -> bool:
     return changed == 1
 
 
-def release(db: Session, order_id: int, courier_id: int) -> bool:
-    """Доставщик отказался: заказ свободен и в прежнем состоянии."""
+def release(db: Session, order_id: int, courier_id: int,
+            note: str | None = None, by: str | None = None) -> bool:
+    """Доставщик отказался: заказ свободен и в прежнем состоянии.
+    note — причина отказа, by — кто отказался: остаются в заказе для панели."""
     order = db.get(Order, order_id)
     if order is None:
         return False
     back = order.courier_prev_status if order.courier_prev_status in AVAILABLE else "ASSEMBLING"
+    values = dict(status=back, courier_id=None, courier_name=None,
+                  courier_taken_at=None, courier_prev_status=None)
+    if note is not None:
+        values.update(courier_drop_note=note, courier_drop_by=by, courier_drop_at=utcnow())
     changed = db.execute(
         update(Order).where(Order.id == order_id, Order.courier_id == courier_id,
                             Order.status == "DELIVERING")
-        .values(status=back, courier_id=None, courier_name=None,
-                courier_taken_at=None, courier_prev_status=None)
+        .values(**values)
         .execution_options(synchronize_session=False)
     ).rowcount
     db.commit()
@@ -484,12 +503,49 @@ def handle_message(db: Session, message: dict) -> None:
         send(chat["id"], t(lang, "pending"))
         return
     text = (message.get("text") or "").strip()
+    buttons = ORDERS_BUTTONS | DELIVERY_BUTTONS | {"/start"}
+    if courier.pending_drop_order_id and text and text not in buttons:
+        return drop_with_reason(db, courier, chat["id"], text, lang)
+    if courier.pending_drop_order_id:
+        # ушёл в другой раздел — значит передумал отказываться
+        courier.pending_drop_order_id = courier.pending_drop_message_id = None
+        db.commit()
     if text in ORDERS_BUTTONS:
         show_orders(db, chat["id"], lang)
     elif text in DELIVERY_BUTTONS:
         show_delivery(db, chat["id"], lang)
     else:
         send(chat["id"], t(lang, "welcome"), keyboard(lang))
+
+
+# короче — это не причина, а случайное нажатие: «.», «ок»
+MIN_REASON = 3
+MAX_REASON = 500
+
+
+def drop_with_reason(db: Session, courier: Courier, chat_id: int, text: str, lang: str) -> None:
+    """Доставщик написал, почему отказывается, — освобождаем заказ."""
+    if len(text) < MIN_REASON:
+        send(chat_id, t(lang, "reason_short"), {"force_reply": True,
+                                                "input_field_placeholder": t(lang, "reason_ph")})
+        return
+    order_id, card_message = courier.pending_drop_order_id, courier.pending_drop_message_id
+    courier.pending_drop_order_id = courier.pending_drop_message_id = None
+    db.commit()
+    reason = text[:MAX_REASON]
+    if not release(db, order_id, courier.telegram_id, note=reason, by=courier.name):
+        send(chat_id, t(lang, "not_yours_changed"), keyboard(lang))
+        return
+    db.expire_all()
+    order = db.get(Order, order_id)
+    note = t(lang, "dropped_note", reason=notify.esc(reason))
+    if card_message:
+        edit(chat_id, card_message, card(order, lang) + "\n\n" + note, None)
+    send(chat_id, note, keyboard(lang))
+    staff(db, None, order, lambda lang: notify.st(
+        lang, "dropped", number=notify.esc(order.number), courier=notify.esc(courier.name))
+        + "\n" + notify.st(lang, "drop_reason", reason=notify.esc(reason)))
+    log.info("Доставщик %s отказался от заказа %s: %s", courier.telegram_id, order.number, reason)
 
 
 def handle_callback(db: Session, background: BackgroundTasks, query: dict) -> None:
@@ -544,19 +600,34 @@ def handle_callback(db: Session, background: BackgroundTasks, query: dict) -> No
             remove(chat_id, message_id, card(order, lang) + "\n\n" + t(lang, "unavailable_note"))
         return
 
-    if action in ("done", "drop"):
+    if action in ("done", "drop", "drop!"):
         if order.courier_id != courier.telegram_id or order.status != "DELIVERING":
             answer(callback_id, t(lang, "not_yours"), True)
             edit(chat_id, message_id, card(order, lang) + "\n\n" + t(lang, "not_yours_note"), None)
             return
         answer(callback_id)
-        question = t(lang, "ask_done" if action == "done" else "ask_drop")
-        edit(chat_id, message_id, card(order, lang) + f"\n\n❓ <b>{question}</b>",
-             confirm_markup(order, action, lang))
+        if action == "done":
+            edit(chat_id, message_id, card(order, lang) + f"\n\n❓ <b>{t(lang, 'ask_done')}</b>",
+                 confirm_markup(order, action, lang))
+            return
+        # Отказ — только с причиной: магазину надо знать, что не так с заказом.
+        # Ждём её следующим сообщением; до тех пор заказ за доставщиком.
+        # «drop!» — подтверждение из прежней версии бота, в старых сообщениях
+        courier.pending_drop_order_id, courier.pending_drop_message_id = order.id, message_id
+        db.commit()
+        edit(chat_id, message_id, card(order, lang) + "\n\n" + t(lang, "ask_reason_card"),
+             {"inline_keyboard": [[{"text": t(lang, "back"), "callback_data": f"back:{order.id}"}]]})
+        send(chat_id, t(lang, "ask_reason", number=order.number),
+             {"force_reply": True, "input_field_placeholder": t(lang, "reason_ph")})
         return
 
     if action == "back":
-        answer(callback_id)
+        if courier.pending_drop_order_id == order.id:
+            courier.pending_drop_order_id = courier.pending_drop_message_id = None
+            db.commit()
+            answer(callback_id, t(lang, "drop_kept"))
+        else:
+            answer(callback_id)
         mine_now = order.courier_id == courier.telegram_id and order.status == "DELIVERING"
         edit(chat_id, message_id, card(order, lang),
              delivery_markup(order, lang) if mine_now else None)
@@ -575,20 +646,6 @@ def handle_callback(db: Session, background: BackgroundTasks, query: dict) -> No
             log.info("Заказ %s доставлен, доставщик %s", order.number, courier.telegram_id)
         else:
             answer(callback_id, t(lang, "not_yours_changed"), True)
-            edit(chat_id, message_id,
-                 card(current(), lang) + "\n\n" + t(lang, "not_yours_note"), None)
-        return
-
-    if action == "drop!":
-        if release(db, order_id, courier.telegram_id):
-            order = current()
-            answer(callback_id, t(lang, "dropped"))
-            edit(chat_id, message_id, card(order, lang) + "\n\n" + t(lang, "dropped_note"), None)
-            staff(db, background, order, lambda lang: notify.st(
-                lang, "dropped", number=notify.esc(order.number), courier=notify.esc(courier.name)))
-            log.info("Доставщик %s отказался от заказа %s", courier.telegram_id, order.number)
-        else:
-            answer(callback_id, t(lang, "not_yours"), True)
             edit(chat_id, message_id,
                  card(current(), lang) + "\n\n" + t(lang, "not_yours_note"), None)
         return
