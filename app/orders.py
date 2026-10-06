@@ -266,7 +266,7 @@ def create_order(
     # Заказ с оплатой картой — только после оплаты (app/shop_bot.py): собирать
     # неоплаченный незачем, а пометка «оплачено» появится там же
     staff = ([] if order.payment_method == "online"
-             else notify.queue_staff(db, order, notify.staff_new_order(order)))
+             else notify.queue_staff(db, order, lambda lang: notify.staff_new_order(order, lang)))
     if staff:
         db.commit()
         background.add_task(notify.send_many, [row.id for row in staff])

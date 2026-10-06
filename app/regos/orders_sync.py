@@ -162,7 +162,8 @@ def sync(db, client: RegosClient | None = None, notify_staff: bool = True) -> di
         # отмена на кассе — единственное, о чём сотрудникам надо сказать:
         # остальные переходы они и так видят в REGOS
         if notify_staff and new == "CANCELED":
-            notify.queue_staff(db, order, notify.staff_canceled(order, "на кассе"))
+            notify.queue_staff(db, order,
+                               lambda lang, order=order: notify.staff_canceled(order, "на кассе", lang))
         if new == "CANCELED":
             # заказ мог быть у доставщика в пути — пусть не везёт
             from app import courier_bot

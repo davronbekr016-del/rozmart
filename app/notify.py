@@ -187,9 +187,112 @@ def send_message(chat_id: int, text: str) -> None:
 # ------------------------------------------------------------------ тексты
 
 
-def money(value: int) -> str:
+def money(value: int, lang: str = "ru") -> str:
     """125000 -> «125 000 сум». Пробелы неразрывные, чтобы сумма не ломалась."""
-    return f"{value:,}".replace(",", " ") + " сум"
+    return f"{value:,}".replace(",", " ") + (" so'm" if lang == "uz" else " сум")
+
+
+# Сообщения сотрудникам на двух языках. Язык — у каждого чата свой
+# (StaffChat.language): в личном — по Telegram сотрудника, в группе — того,
+# кто добавил бота; администратор может переключить в панели. Узбекский —
+# латиницей. Имена, адреса и товары приходят из заказа и не переводятся.
+LANGS = ("ru", "uz")
+STAFF_TEXTS = {
+    "ru": {
+        "new_order": "🆕 Новый заказ <b>{number}</b> — {total}",
+        "more": "…и ещё {n}",
+        "map_point": "точка на карте",
+        "pay_cash": "наличными курьеру",
+        "pay_online": "онлайн картой",
+        "paid": "💳 <b>ОПЛАЧЕНО КАРТОЙ — деньги с покупателя не брать</b>",
+        "paid_test": " (ТЕСТОВАЯ ОПЛАТА — денег не поступало)",
+        "canceled": "❌ Заказ <b>{number}</b> отменён ({source})",
+        "canceled_paid": "⚠️ <b>Заказ был оплачен картой — нужен возврат покупателю</b>",
+        "src_panel": "в панели",
+        "src_regos": "на кассе",
+        "taken": "🚚 Заказ <b>{number}</b> взял доставщик {courier}",
+        "delivered": "✅ Заказ <b>{number}</b> доставлен — {courier}.",
+        "cash_got": " Получено наличными: {total}.",
+        "dropped": "↩️ Доставщик {courier} отказался от заказа <b>{number}</b> — заказ снова свободен",
+        "courier_off": "↩️ Доставщик {courier} отключён — заказ <b>{number}</b> снова свободен",
+        "refund": "↩️ Возврат через Payme по заказу <b>{number}</b> — {total} вернутся покупателю.",
+        "refund_canceled": "Заказ отменён — не собирать и не выдавать.",
+        "refund_status": "Статус заказа: {status}.",
+        "late": "⚠️ Оплата картой по заказу <b>{number}</b>, а заказ {state}.\n"
+                "Списано {total}, платёж {charge}.\n"
+                "Нужен возврат покупателю или восстановление заказа — решите вручную.",
+        "late_paid": "уже оплачен",
+        "late_canceled": "отменён",
+        "unknown": "⚠️ Оплата картой по неизвестному заказу «{payload}».\n"
+                   "Списано {total}, платёж {charge}. Нужен возврат.",
+        "welcome_staff": "Этот чат подключён к заказам ROZMART.\n\n"
+                         "Сюда приходит каждый новый заказ и сообщения об отменах.",
+        "welcome_pending": "Это служебный бот магазина ROZMART — сюда приходят заказы "
+                           "сотрудникам.\n\nЧат я запомнил. Чтобы заказы приходили и сюда, "
+                           "попросите администратора включить его в панели: «Состав каталога» → "
+                           "«Кому приходят заказы».\n\nЕсли вы покупатель — заказ и его состояние "
+                           "видно в самом приложении магазина, в разделе «Мои заказы».",
+    },
+    "uz": {
+        "new_order": "🆕 Yangi buyurtma <b>{number}</b> — {total}",
+        "more": "…yana {n} ta",
+        "map_point": "xaritadagi nuqta",
+        "pay_cash": "kuryerga naqd pul",
+        "pay_online": "karta orqali onlayn",
+        "paid": "💳 <b>KARTA ORQALI TO'LANGAN — xaridordan pul olinmasin</b>",
+        "paid_test": " (TEST TO'LOVI — pul tushmagan)",
+        "canceled": "❌ <b>{number}</b> buyurtma bekor qilindi ({source})",
+        "canceled_paid": "⚠️ <b>Buyurtma karta orqali to'langan edi — xaridorga pulni qaytarish kerak</b>",
+        "src_panel": "panelda",
+        "src_regos": "kassada",
+        "taken": "🚚 <b>{number}</b> buyurtmani yetkazib beruvchi {courier} oldi",
+        "delivered": "✅ <b>{number}</b> buyurtma yetkazildi — {courier}.",
+        "cash_got": " Naqd olindi: {total}.",
+        "dropped": "↩️ Yetkazib beruvchi {courier} <b>{number}</b> buyurtmadan voz kechdi — "
+                   "buyurtma yana bo'sh",
+        "courier_off": "↩️ Yetkazib beruvchi {courier} o'chirildi — <b>{number}</b> buyurtma yana bo'sh",
+        "refund": "↩️ <b>{number}</b> buyurtma bo'yicha Payme orqali qaytarish — {total} "
+                  "xaridorga qaytariladi.",
+        "refund_canceled": "Buyurtma bekor qilindi — yig'ilmasin va berilmasin.",
+        "refund_status": "Buyurtma holati: {status}.",
+        "late": "⚠️ <b>{number}</b> buyurtma uchun karta orqali to'lov keldi, lekin buyurtma {state}.\n"
+                "Yechildi {total}, to'lov {charge}.\n"
+                "Xaridorga pulni qaytarish yoki buyurtmani tiklash kerak — qo'lda hal qiling.",
+        "late_paid": "allaqachon to'langan",
+        "late_canceled": "bekor qilingan",
+        "unknown": "⚠️ Noma'lum buyurtma «{payload}» uchun karta orqali to'lov.\n"
+                   "Yechildi {total}, to'lov {charge}. Pulni qaytarish kerak.",
+        "welcome_staff": "Bu chat ROZMART buyurtmalariga ulangan.\n\n"
+                         "Bu yerga har bir yangi buyurtma va bekor qilinganlar haqida xabar keladi.",
+        "welcome_pending": "Bu ROZMART do'konining xizmat boti — xodimlarga buyurtmalar shu yerga "
+                           "keladi.\n\nChatni eslab qoldim. Buyurtmalar bu yerga ham kelishi uchun "
+                           "administratordan uni panelda yoqishni so'rang: «Состав каталога» → "
+                           "«Кому приходят заказы».\n\nAgar siz xaridor bo'lsangiz — buyurtmangiz "
+                           "va uning holati do'kon ilovasida, «Mening buyurtmalarim» bo'limida.",
+    },
+}
+
+# Срок доставки хранится в заказе по-русски — это значение из формы
+SLOTS_UZ = {
+    "Как можно скорее": "Imkon qadar tezroq",
+    "Сегодня вечером": "Bugun kechqurun",
+    "Завтра утром": "Ertaga ertalab",
+}
+
+
+def st(lang: str, key: str, **values) -> str:
+    return (STAFF_TEXTS.get(lang) or STAFF_TEXTS["ru"])[key].format(**values)
+
+
+def lang_of(sender: dict | None) -> str:
+    """Язык по настройке Telegram: узбекский — у кого Telegram на узбекском."""
+    code = ((sender or {}).get("language_code") or "").lower()
+    return "uz" if code.startswith("uz") else "ru"
+
+
+def slot(order: Order, lang: str) -> str:
+    return SLOTS_UZ.get(order.delivery_slot, order.delivery_slot) if lang == "uz" \
+        else order.delivery_slot
 
 
 def esc(text: str) -> str:
@@ -208,7 +311,6 @@ ITEMS_SHOWN = 15
 # Карточка заказа для сотрудников. Здесь, в отличие от сообщения покупателю,
 # нужны контакты и адрес: по ним заказ собирают и везут. Поэтому подписка
 # на эти сообщения закрыта кодом — см. app/bot.py.
-PAYMENT_TEXT = {"cash": "наличными курьеру", "online": "онлайн картой"}
 
 
 def map_link(order: Order) -> str | None:
@@ -223,52 +325,55 @@ def map_link(order: Order) -> str | None:
     return f"https://maps.google.com/?q={order.lat},{order.lon}"
 
 
-def payment_line(order: Order) -> str:
+def payment_line(order: Order, lang: str = "ru") -> str:
     """Строка об оплате. У оплаченного картой — крупно и без двусмысленности:
     курьер, который возьмёт деньги второй раз, — худшее, что тут может быть."""
     if order.paid_at is not None:
         from app import payments
-        test = " (ТЕСТОВАЯ ОПЛАТА — денег не поступало)" if payments.is_test() else ""
-        return f"💳 <b>ОПЛАЧЕНО КАРТОЙ — деньги с покупателя не брать</b>{test}"
-    return f"💵 {PAYMENT_TEXT.get(order.payment_method, esc(order.payment_method))}"
+        return st(lang, "paid") + (st(lang, "paid_test") if payments.is_test() else "")
+    key = {"cash": "pay_cash", "online": "pay_online"}.get(order.payment_method)
+    return f"💵 {st(lang, key) if key else esc(order.payment_method)}"
 
 
-def staff_new_order(order: Order) -> str:
-    lines = [
-        f"🆕 Новый заказ <b>{esc(order.number)}</b> — {money(order.total)}",
-        "",
-    ]
+def staff_new_order(order: Order, lang: str = "ru") -> str:
+    lines = [st(lang, "new_order", number=esc(order.number), total=money(order.total, lang)), ""]
     for item in order.items[:ITEMS_SHOWN]:
         count = f" × {item.quantity}" if item.quantity > 1 else ""
         lines.append(f"• {esc(item.product_name)} {esc(item.weight)}{count} — "
-                     f"{money(item.price * item.quantity)}")
+                     f"{money(item.price * item.quantity, lang)}")
     if len(order.items) > ITEMS_SHOWN:
-        lines.append(f"…и ещё {len(order.items) - ITEMS_SHOWN}")
+        lines.append(st(lang, "more", n=len(order.items) - ITEMS_SHOWN))
 
     contact = [esc(order.customer_name), esc(order.phone)]
     if order.telegram_username:
         contact.append(f"@{esc(order.telegram_username)}")
+    point = map_link(order)
     lines += [
         "",
         " · ".join(contact),
         f"📍 {esc(order.address)}"
-        + (f' — <a href="{map_link(order)}">точка на карте</a>' if map_link(order) else ""),
-        f"🕐 {esc(order.delivery_slot)}",
-        payment_line(order),
+        + (f' — <a href="{point}">{st(lang, "map_point")}</a>' if point else ""),
+        f"🕐 {esc(slot(order, lang))}",
+        payment_line(order, lang),
     ]
     if order.comment:
         lines.append(f"📝 {esc(order.comment)}")
     return "\n".join(lines)
 
 
-def staff_canceled(order: Order, source: str) -> str:
-    """source — откуда пришла отмена: «в панели», «из REGOS». Сотруднику важно
+# откуда пришла отмена — по-русски её передают вызывающие, переводим здесь
+SOURCES = {"в панели": "src_panel", "на кассе": "src_regos"}
+
+
+def staff_canceled(order: Order, source: str, lang: str = "ru") -> str:
+    """source — откуда пришла отмена: «в панели», «на кассе». Сотруднику важно
     знать, чьё это действие: своё или кассы."""
-    text = (f"❌ Заказ <b>{esc(order.number)}</b> отменён ({esc(source)})\n"
-            f"{esc(order.customer_name)} · {esc(order.phone)} · {money(order.total)}")
+    where = st(lang, SOURCES[source]) if source in SOURCES else esc(source)
+    text = (st(lang, "canceled", number=esc(order.number), source=where) + "\n"
+            f"{esc(order.customer_name)} · {esc(order.phone)} · {money(order.total, lang)}")
     if order.paid_at is not None:
         # возвраты на пилоте ручные: без этой строки про деньги покупателя забудут
-        text += "\n⚠️ <b>Заказ был оплачен картой — нужен возврат покупателю</b>"
+        text += "\n" + st(lang, "canceled_paid")
     return text
 
 
@@ -276,17 +381,21 @@ def staff_chats(db) -> list[StaffChat]:
     return list(db.scalars(select(StaffChat).where(StaffChat.active)))
 
 
-def queue_staff(db, order: Order, text: str) -> list[Notification]:
-    """Кладёт сообщение во все чаты сотрудников. Коммит — на вызывающем коде."""
+def queue_staff(db, order: Order | None, text) -> list[Notification]:
+    """Кладёт сообщение во все чаты сотрудников. Коммит — на вызывающем коде.
+
+    text — строка или функция от языка: тогда каждому чату — на его языке.
+    """
     if not enabled():
         return []
     rows = []
     for chat in staff_chats(db):
+        body = text(chat.language if chat.language in LANGS else "ru") if callable(text) else text
         row = Notification(
             # для сообщения сотрудникам адресат известен сразу: это сам чат,
             # искать его по подписке покупателя не нужно
             telegram_id=chat.chat_id, chat_id=chat.chat_id,
-            order_id=order.id, kind="staff", text=text,
+            order_id=order.id if order is not None else None, kind="staff", text=body,
         )
         db.add(row)
         rows.append(row)

@@ -668,6 +668,24 @@
                     c.access ? 'получает заказы' : 'нет доступа');
       row.appendChild(mark);
 
+      // язык сообщений в этом чате: RU / UZ
+      var lang = el('button', 'act ghost', c.language === 'uz' ? 'UZ' : 'RU');
+      lang.title = 'Язык сообщений в этом чате — нажмите, чтобы сменить';
+      lang.style.minWidth = '46px';
+      lang.onclick = function () {
+        var next = c.language === 'uz' ? 'ru' : 'uz';
+        lang.disabled = true;
+        api('/notify/chats/' + c.chat_id + '/language', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ language: next })
+        }).then(function () {
+          say(next === 'uz' ? 'Сообщения — на узбекском' : 'Сообщения — на русском', 'ok');
+          loadChats();
+        }).catch(function (e) { say(e.message); lang.disabled = false; });
+      };
+      row.appendChild(lang);
+
       var btn = el('button', 'act' + (c.access ? ' ghost' : ''),
                    c.access ? 'Отключить' : 'Дать доступ');
       btn.onclick = function () {

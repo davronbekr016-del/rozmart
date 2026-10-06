@@ -35,14 +35,24 @@ TRANSITIONS = {
 # платежа и передаётся на сборку только после него (BR-13).
 BY_PAYMENT = {"cash": "CONFIRMED", "online": "NEW"}
 
+# Те же состояния по-узбекски (латиницей) — для приложения и ботов
+TEXT_UZ = {
+    "NEW": "To'lov kutilmoqda",
+    "CONFIRMED": "Qabul qilindi",
+    "ASSEMBLING": "Yig'ilmoqda",
+    "DELIVERING": "Yetkazilmoqda",
+    "DONE": "Bajarildi",
+    "CANCELED": "Bekor qilindi",
+}
+
 # Состояния, после которых с заказом уже ничего не происходит.
 FINAL = {"DONE", "CANCELED"}
 
 
-def text(status: str) -> str:
+def text(status: str, lang: str = "ru") -> str:
     """Название состояния для покупателя. Незнакомое состояние не выдумываем,
     а показываем как есть: молчаливое «В работе» однажды уже скрыло отмену."""
-    return TEXT.get(status, status)
+    return (TEXT_UZ if lang == "uz" else TEXT).get(status, status)
 
 
 def move(db, order, to: str, *, unpaid_only: bool = False, values: dict | None = None,

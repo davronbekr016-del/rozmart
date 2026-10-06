@@ -30,6 +30,7 @@ os.environ.update({
     "NOTIFY_BOT_TOKEN": "222:staff-token",
     "COURIER_BOT_TOKEN": "333:courier-token",
     "COURIER_WEBHOOK_SECRET": "courier-secret",
+    "NOTIFY_WEBHOOK_SECRET": "staff-secret",
 })
 
 from fastapi.testclient import TestClient  # noqa: E402
@@ -370,6 +371,36 @@ told = [p for t, m, p in sent if t == "333:courier-token" and p.get("chat_id") =
 check(14, "Отмена из панели — тоже на его языке", told and "bekor qilindi" in told[0]["text"])
 check(14, "Русская кнопка у узбекского доставщика тоже работает",
       any("buyurtma" in p["text"].lower() for p in say_uz("📦 Заказы")))
+
+# ------------------------------------------------------------ служебный бот по-узбекски
+r = client.patch("/api/admin/notify/chats/-100/language", json={"language": "uz"}, headers=ADMIN)
+check(15, "Язык группы сотрудников переключается в панели", r.status_code == 200
+      and client.get("/api/admin/notify/chats", headers=ADMIN).json()["chats"][0]["language"] == "uz")
+check(15, "Чужой язык не принимается",
+      client.patch("/api/admin/notify/chats/-100/language", json={"language": "en"},
+                   headers=ADMIN).status_code == 422)
+before = len(staff_texts())
+cash7 = order("courier-key-008")
+texts = staff_texts()[before:]
+check(15, "Новый заказ сотрудникам — по-узбекски",
+      texts and "Yangi buyurtma" in texts[0] and "Imkon qadar tezroq" in texts[0]
+      and "so'm" in texts[0] and "kuryerga naqd pul" in texts[0], texts[:1])
+press(A, f"take:{row(cash7).id}")
+check(15, "«Взял доставщик» — тоже по-узбекски",
+      any("yetkazib beruvchi" in t and cash7 in t for t in staff_texts()[before:]))
+client.patch("/api/admin/notify/chats/-100/language", json={"language": "ru"}, headers=ADMIN)
+before = len(staff_texts())
+client.patch(f"/api/admin/orders/{row(cash7).id}/status", json={"status": "CANCELED"}, headers=ADMIN)
+check(15, "Вернули русский — отмена по-русски", any("отменён (в панели)" in t
+                                                   for t in staff_texts()[before:]))
+out = []
+sent.clear()
+client.post("/tg/hook", json={"update_id": 1, "message": {
+    "chat": {"id": 777, "type": "private"}, "text": "/start",
+    "from": {"id": 777, "first_name": "Xodim", "language_code": "uz"}}},
+    headers={"X-Telegram-Bot-Api-Secret-Token": "staff-secret"})
+check(15, "Сотрудник с узбекским Telegram получает ответ бота по-узбекски",
+      any("xizmat boti" in p.get("text", "") for t, m, p in sent if t == "222:staff-token"))
 
 failed = [r for r in results if not r[2]]
 print(f"\nИтого проверок: {len(results)}, не прошло: {len(failed)}")

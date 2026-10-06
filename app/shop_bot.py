@@ -59,19 +59,10 @@ def handle_pre_checkout(db: Session, query: dict) -> dict:
     return answer
 
 
-def alert_staff(db: Session, background: BackgroundTasks, order, text: str) -> None:
-    """Сообщение сотрудникам о том, что с оплатой что-то не так."""
-    if order is None:
-        # заказа нет — привязать сообщение не к чему, шлём как есть
-        from app.models import Notification
-        rows = []
-        for chat in notify.staff_chats(db):
-            row = Notification(telegram_id=chat.chat_id, chat_id=chat.chat_id,
-                               order_id=None, kind="staff", text=text)
-            db.add(row)
-            rows.append(row)
-    else:
-        rows = notify.queue_staff(db, order, text)
+def alert_staff(db: Session, background: BackgroundTasks, order, text) -> None:
+    """Сообщение сотрудникам о том, что с оплатой что-то не так. text — строка
+    или функция от языка чата. Заказа может не быть — тогда без привязки."""
+    rows = notify.queue_staff(db, order, text)
     if rows:
         db.commit()
         background.add_task(notify.send_many, [row.id for row in rows])
@@ -91,7 +82,7 @@ def send_onward(db: Session, background: BackgroundTasks, order, only_missing=Fa
     sent = only_missing and db.query(Notification).filter(
         Notification.order_id == order.id, Notification.kind == "staff").first()
     if not sent:
-        rows = notify.queue_staff(db, order, notify.staff_new_order(order))
+        rows = notify.queue_staff(db, order, lambda lang: notify.staff_new_order(order, lang))
         if rows:
             db.commit()
             background.add_task(notify.send_many, [row.id for row in rows])
@@ -116,7 +107,7 @@ def handle_payment(db: Session, background: BackgroundTasks, payment: dict) -> N
         return
 
     charge = payment.get("telegram_payment_charge_id") or "—"
-    amount = notify.money((payment.get("total_amount") or 0) // payments.MINOR)
+    paid_sum = (payment.get("total_amount") or 0) // payments.MINOR
 
     if outcome == "confirmed":
         send_onward(db, background, order)
@@ -130,19 +121,14 @@ def handle_payment(db: Session, background: BackgroundTasks, payment: dict) -> N
             send_onward(db, background, order, only_missing=True)
         return
     if outcome == "late":
-        state = "уже оплачен" if order.paid_at else "отменён"
-        alert_staff(db, background, order, (
-            f"⚠️ Оплата картой по заказу <b>{notify.esc(order.number)}</b>, "
-            f"а заказ {state}.\n"
-            f"Списано {amount}, платёж {notify.esc(charge)}.\n"
-            "Нужен возврат покупателю или восстановление заказа — решите вручную."
-        ))
+        state = "late_paid" if order.paid_at else "late_canceled"
+        alert_staff(db, background, order, lambda lang: notify.st(
+            lang, "late", number=notify.esc(order.number), state=notify.st(lang, state),
+            total=notify.money(paid_sum, lang), charge=notify.esc(charge)))
         return
-    alert_staff(db, background, None, (
-        f"⚠️ Оплата картой по неизвестному заказу "
-        f"«{notify.esc(payment.get('invoice_payload') or '')}».\n"
-        f"Списано {amount}, платёж {notify.esc(charge)}. Нужен возврат."
-    ))
+    alert_staff(db, background, None, lambda lang: notify.st(
+        lang, "unknown", payload=notify.esc(payment.get("invoice_payload") or ""),
+        total=notify.money(paid_sum, lang), charge=notify.esc(charge)))
 
 
 def process(db: Session, background: BackgroundTasks, update: dict) -> dict:

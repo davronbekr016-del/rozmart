@@ -356,6 +356,9 @@ class StaffChat(Base):
     username: Mapped[str | None] = mapped_column(String(64))
     # 'private' — личный чат сотрудника, 'group' — общая группа
     kind: Mapped[str] = mapped_column(String(20), default="private")
+    # язык сообщений: "ru" или "uz". В личном чате — по Telegram сотрудника,
+    # в группе — того, кто добавил бота; переключается в панели
+    language: Mapped[str | None] = mapped_column(String(5))
     added_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     active: Mapped[bool] = mapped_column(default=True, server_default=true())
 

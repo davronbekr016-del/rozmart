@@ -380,7 +380,7 @@ def release_all(db: Session, courier_id: int) -> list[str]:
     return released
 
 
-def staff(db: Session, background: BackgroundTasks | None, order: Order, text: str) -> None:
+def staff(db: Session, background: BackgroundTasks | None, order: Order, text) -> None:
     """Сообщение сотрудникам в служебный бот: кто взял, кто доставил.
     Служебный бот общий для магазина — по-русски."""
     rows = notify.queue_staff(db, order, text)
@@ -530,8 +530,8 @@ def handle_callback(db: Session, background: BackgroundTasks, query: dict) -> No
             # только те, что ещё можно взять. Он теперь в «Доставке»
             answer(callback_id, t(lang, "taken", number=order.number), True)
             remove(chat_id, message_id, card(order, lang) + "\n\n" + t(lang, "taken_note"))
-            staff(db, background, order, f"🚚 Заказ <b>{notify.esc(order.number)}</b> "
-                                         f"взял доставщик {notify.esc(courier.name)}")
+            staff(db, background, order, lambda lang: notify.st(
+                lang, "taken", number=notify.esc(order.number), courier=notify.esc(courier.name)))
             log.info("Заказ %s взял доставщик %s", order.number, courier.telegram_id)
         else:
             order = current()
@@ -567,9 +567,11 @@ def handle_callback(db: Session, background: BackgroundTasks, query: dict) -> No
             order = current()
             answer(callback_id, t(lang, "done_ok"))
             edit(chat_id, message_id, card(order, lang) + "\n\n" + t(lang, "done_note"), None)
-            cash = "" if order.paid_at else f" Получено наличными: {notify.money(order.total)}."
-            staff(db, background, order, f"✅ Заказ <b>{notify.esc(order.number)}</b> доставлен — "
-                                         f"{notify.esc(courier.name)}.{cash}")
+            staff(db, background, order, lambda lang: notify.st(
+                lang, "delivered", number=notify.esc(order.number),
+                courier=notify.esc(courier.name))
+                + ("" if order.paid_at else notify.st(
+                    lang, "cash_got", total=notify.money(order.total, lang))))
             log.info("Заказ %s доставлен, доставщик %s", order.number, courier.telegram_id)
         else:
             answer(callback_id, t(lang, "not_yours_changed"), True)
@@ -582,9 +584,8 @@ def handle_callback(db: Session, background: BackgroundTasks, query: dict) -> No
             order = current()
             answer(callback_id, t(lang, "dropped"))
             edit(chat_id, message_id, card(order, lang) + "\n\n" + t(lang, "dropped_note"), None)
-            staff(db, background, order,
-                  f"↩️ Доставщик {notify.esc(courier.name)} отказался от заказа "
-                  f"<b>{notify.esc(order.number)}</b> — заказ снова свободен")
+            staff(db, background, order, lambda lang: notify.st(
+                lang, "dropped", number=notify.esc(order.number), courier=notify.esc(courier.name)))
             log.info("Доставщик %s отказался от заказа %s", courier.telegram_id, order.number)
         else:
             answer(callback_id, t(lang, "not_yours"), True)

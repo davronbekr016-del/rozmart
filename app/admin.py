@@ -592,7 +592,8 @@ def set_order_status(
     db.refresh(order)
     if order.status == "CANCELED":
         # сотрудникам об отмене сообщаем отдельно: заказ мог быть уже в сборке
-        staff = notify.queue_staff(db, order, notify.staff_canceled(order, "в панели"))
+        staff = notify.queue_staff(db, order,
+                                   lambda lang: notify.staff_canceled(order, "в панели", lang))
         if staff:
             db.commit()
             background.add_task(notify.send_many, [row.id for row in staff])
@@ -738,6 +739,7 @@ def notify_chats(db: Session = Depends(get_db), _: TelegramUser = Depends(requir
         "username": chat.username,
         "kind": chat.kind,
         "access": chat.active,
+        "language": chat.language if chat.language in notify.LANGS else "ru",
     } for chat in db.scalars(select(StaffChat))]
     rows.sort(key=lambda r: (not r["access"], r["kind"] != "group", r["title"].lower()))
     return {"enabled": notify.enabled(), "bot": notify.bot_username(), "chats": rows}
@@ -760,6 +762,28 @@ def grant_notify_access(
     db.commit()
     log.info("Чату %s (%s) выдан доступ к заказам", chat_id, chat.title)
     return {"chat_id": chat_id, "access": True}
+
+
+class ChatLanguageIn(BaseModel):
+    language: str = Field(pattern="^(ru|uz)$")
+
+
+@router.patch("/notify/chats/{chat_id}/language")
+def set_chat_language(
+    chat_id: int,
+    data: ChatLanguageIn,
+    db: Session = Depends(get_db),
+    _: TelegramUser = Depends(require_admin),
+):
+    """Язык сообщений о заказах в этом чате. Для группы — единственный
+    способ его сменить: пишут в неё люди с разными языками Telegram."""
+    chat = db.get(StaffChat, chat_id)
+    if chat is None:
+        raise HTTPException(status_code=404, detail="Такого чата нет в списке")
+    chat.language = data.language
+    db.commit()
+    log.info("Чат %s (%s): язык сообщений %s", chat_id, chat.title, data.language)
+    return {"chat_id": chat_id, "language": chat.language}
 
 
 @router.delete("/notify/chats/{chat_id}")
@@ -840,9 +864,8 @@ def revoke_courier(telegram_id: int, background: BackgroundTasks, db: Session = 
     released = courier_bot.release_all(db, telegram_id)
     for number in released:
         order = db.scalar(select(Order).where(Order.number == number))
-        courier_bot.staff(db, background, order,
-                          f"↩️ Доставщик {notify.esc(courier.name)} отключён — заказ "
-                          f"<b>{notify.esc(number)}</b> снова свободен")
+        courier_bot.staff(db, background, order, lambda lang, number=number: notify.st(
+            lang, "courier_off", courier=notify.esc(courier.name), number=notify.esc(number)))
     log.info("Доставщик %s отключён, освобождены заказы: %s", telegram_id, released)
     return {"telegram_id": telegram_id, "access": False, "released": released}
 

@@ -375,10 +375,12 @@ def cancel(db: Session, params: dict, background: BackgroundTasks) -> dict:
     db.commit()
     log.warning("Payme: возврат по заказу %s, транзакция %s", tx.order_number, tx.payme_id)
     if order is not None:
-        text = (f"↩️ Возврат через Payme по заказу <b>{notify.esc(order.number)}</b> — "
-                f"{notify.money(tx.amount // payments.MINOR)} вернутся покупателю.\n"
-                + ("Заказ отменён — не собирать и не выдавать."
-                   if canceled else f"Статус заказа: {notify.esc(order_status.text(order.status))}."))
+        def text(lang):
+            return (notify.st(lang, "refund", number=notify.esc(order.number),
+                              total=notify.money(tx.amount // payments.MINOR, lang)) + "\n"
+                    + (notify.st(lang, "refund_canceled") if canceled else notify.st(
+                        lang, "refund_status",
+                        status=notify.esc(order_status.text(order.status, lang)))))
         rows = notify.queue_staff(db, order, text)
         if rows:
             db.commit()

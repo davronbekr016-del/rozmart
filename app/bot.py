@@ -37,22 +37,13 @@ SECRET = os.getenv("NOTIFY_WEBHOOK_SECRET", "").strip()
 # известный адрес — лишние запросы, которые придётся разбирать.
 WEBHOOK_PATH = "/tg/hook"
 
-WELCOME_STAFF = (
-    "Этот чат подключён к заказам ROZMART.\n\n"
-    "Сюда приходит каждый новый заказ и сообщения об отменах."
-)
-
-WELCOME_PENDING = (
-    "Это служебный бот магазина ROZMART — сюда приходят заказы сотрудникам.\n\n"
-    "Чат я запомнил. Чтобы заказы приходили и сюда, попросите администратора "
-    "включить его в панели: «Состав каталога» → «Кому приходят заказы».\n\n"
-    "Если вы покупатель — заказ и его состояние видно в самом приложении "
-    "магазина, в разделе «Мои заказы»."
-)
+def welcome(chat: StaffChat) -> str:
+    lang = chat.language if chat.language in notify.LANGS else "ru"
+    return notify.st(lang, "welcome_staff" if chat.active else "welcome_pending")
 
 
 def remember_chat(db: Session, chat_id: int, title: str, kind: str,
-                  username: str | None = None) -> StaffChat:
+                  username: str | None = None, language: str | None = None) -> StaffChat:
     """Запоминает чат, чтобы администратор увидел его в панели.
 
     Доступ к заказам чат так не получает: active остаётся выключенным, пока
@@ -65,13 +56,17 @@ def remember_chat(db: Session, chat_id: int, title: str, kind: str,
     chat = db.get(StaffChat, chat_id)
     if chat is None:
         chat = StaffChat(chat_id=chat_id, title=title, kind=kind,
-                         username=username, active=False)
+                         username=username, active=False, language=language or "ru")
         db.add(chat)
         return chat
     if title:
         chat.title = title
     if username:
         chat.username = username
+    # личный чат следует за языком Telegram сотрудника; язык группы задали
+    # при добавлении бота, и пишущие в неё его не меняют
+    if language and kind == "private":
+        chat.language = language
     return chat
 
 
@@ -101,9 +96,10 @@ def handle_message(db: Session, message: dict) -> None:
         title = " ".join(filter(None, [sender.get("first_name"),
                                        sender.get("last_name")])) or str(chat_id)
         username = (sender.get("username") or "").strip() or None
-        remember_chat(db, chat_id, title, "private", username)
+        known = remember_chat(db, chat_id, title, "private", username, notify.lang_of(sender))
     else:
-        remember_chat(db, chat_id, chat.get("title") or "группа", "group")
+        known = remember_chat(db, chat_id, chat.get("title") or "группа", "group",
+                              language=notify.lang_of(sender))
     db.commit()
 
     # В группе на каждое сообщение не отвечаем: бот там сидит молча и ждёт,
@@ -111,7 +107,7 @@ def handle_message(db: Session, message: dict) -> None:
     text = (message.get("text") or "").strip()
     if kind != "private" and not text.startswith(("/start", "/staff")):
         return
-    reply(chat_id, WELCOME_STAFF if has_access(db, chat_id) else WELCOME_PENDING)
+    reply(chat_id, welcome(known))
 
 
 def handle_membership(db: Session, update: dict) -> None:
@@ -135,15 +131,17 @@ def handle_membership(db: Session, update: dict) -> None:
         return
 
     if chat.get("type") in {"group", "supergroup"}:
-        remember_chat(db, chat_id, chat.get("title") or "группа", "group")
+        known = remember_chat(db, chat_id, chat.get("title") or "группа", "group",
+                              language=notify.lang_of(sender))
     else:
         title = " ".join(filter(None, [sender.get("first_name"),
                                        sender.get("last_name")])) or str(chat_id)
-        remember_chat(db, chat_id, title, "private",
-                      (sender.get("username") or "").strip() or None)
+        known = remember_chat(db, chat_id, title, "private",
+                              (sender.get("username") or "").strip() or None,
+                              notify.lang_of(sender))
     db.commit()
-    if not has_access(db, chat_id):
-        reply(chat_id, WELCOME_PENDING)
+    if not known.active:
+        reply(chat_id, welcome(known))
 
 
 @router.post(WEBHOOK_PATH, include_in_schema=False)
