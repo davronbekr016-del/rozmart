@@ -975,8 +975,8 @@ def set_payment_config(data: PaymentConfigIn, request: Request, db: Session = De
         if name not in payments.CONFIG_FIELDS:
             raise HTTPException(status_code=400, detail=f"Неизвестная настройка {name}")
         value = (raw or "").strip()
-        if name in payments.SECRETS and not value:
-            continue                        # пустое поле секрета — «не менять»
+        if name in payments.MASKED and not value:
+            continue                        # пустое поле секрета и ID кассы — «не менять»
         if name == "PAYME_MERCHANT_ID" and value and not re.fullmatch(r"[0-9a-f]{24}", value):
             raise HTTPException(status_code=400,
                                 detail="ID кассы Payme — 24 символа: цифры и латинские a–f")

@@ -180,7 +180,7 @@ check(7, "Неподключённый способ — 404",
 r = client.get("/api/admin/payments", headers=ADMIN).json()
 cfg = r["config"]
 check(8, "Панель видит ключи с сервера, секрет — только хвостом",
-      cfg["PAYME_MERCHANT_ID"]["value"] == "65f0c0ffee0000000000abcd"
+      cfg["PAYME_MERCHANT_ID"] == {"set": True, "masked": "••••abcd", "source": "server"}
       and cfg["PAYME_KEY"]["masked"] == "••••-123" and "value" not in cfg["PAYME_KEY"]
       and cfg["PAYME_KEY"]["source"] == "server", cfg["PAYME_KEY"])
 check(8, "И адреса для Payme и Paynet", r["endpoints"]["paynet"].endswith("/paynet"))

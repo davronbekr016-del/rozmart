@@ -570,7 +570,7 @@
   // поля каждого способа: [имя настройки, подпись, вид, подсказка]
   var PAY_FIELDS = {
     payme: [
-      ['PAYME_MERCHANT_ID', 'ID кассы', 'text', '24 символа, из кабинета Payme Business'],
+      ['PAYME_MERCHANT_ID', 'ID кассы', 'masked', '24 символа, из кабинета Payme Business'],
       ['PAYME_KEY', 'Ключ кассы', 'secret', 'Боевой или тестовый — смотря по режиму ниже'],
       ['PAYME_TEST', 'Тестовый режим (песочница Payme)', 'bool',
        'Выключено — настоящие деньги']
@@ -607,7 +607,8 @@
       input.type = kind === 'secret' ? 'password' : 'text';
       input.autocomplete = 'off';
       input.spellcheck = false;
-      if (kind === 'secret') {
+      // секрет и ID кассы — только хвостом; поле пустое, вписанное заменяет
+      if (kind === 'secret' || kind === 'masked') {
         input.placeholder = c.set ? 'задан ' + c.masked + ' — впишите новый, чтобы заменить'
                                   : 'не задан';
         input.dataset.kind = 'secret';

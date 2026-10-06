@@ -189,6 +189,8 @@ CONFIG_FIELDS = {
     "TESTERS_ONLY": lambda v: v == "1",
 }
 SECRETS = {"PAYME_KEY", "PAYNET_PASSWORD"}
+# что панель показывает только хвостом «••••abcd»: секреты и ID кассы
+MASKED = SECRETS | {"PAYME_MERCHANT_ID"}
 # значения из окружения — к ним возвращаемся, если в панели поле очистили
 _BASE = {name: globals()[name] for name in CONFIG_FIELDS}
 _state = {"at": 0.0, "off": set(), "applied": set(), "panel": {}}
@@ -279,7 +281,7 @@ def config_view() -> dict:
         else:
             text = str(value or "")
         source = "panel" if name in _state["applied"] else ("server" if text else "none")
-        if name in SECRETS:
+        if name in MASKED:
             shown[name] = {"set": bool(text), "masked": ("••••" + text[-4:]) if text else "",
                            "source": source}
         else:
