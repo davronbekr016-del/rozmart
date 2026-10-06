@@ -104,11 +104,16 @@ def say(user, text):
 
 def press(user, data, message_id=77):
     sent.clear()
-    hook({"callback_query": {"id": f"cb{update_id[0]}", "data": data,
-                             "from": {"id": user, "first_name": f"Курьер{user}"},
-                             "message": {"message_id": message_id,
-                                         "chat": {"id": user, "type": "private"}}}})
-    return [(m, p) for t, m, p in sent if t == "333:courier-token"]
+    r = hook({"callback_query": {"id": f"cb{update_id[0]}", "data": data,
+                                 "from": {"id": user, "first_name": f"Курьер{user}"},
+                                 "message": {"message_id": message_id,
+                                             "chat": {"id": user, "type": "private"}}}})
+    calls = [(m, p) for t, m, p in sent if t == "333:courier-token"]
+    body = r.json()
+    if body.get("method"):
+        # ответ на нажатие — прямо в теле ответа на вебхук
+        calls.insert(0, (body["method"], {k: v for k, v in body.items() if k != "method"}))
+    return calls
 
 
 def alert_text(calls):
@@ -307,6 +312,20 @@ msg = edited(calls)
 check(12, "Не удалилось (старше 48 часов) — кнопки сняты, написано «вы приняли»",
       row(cash4).courier_id == B and msg and "Вы приняли заказ" in msg["text"]
       and "reply_markup" not in msg)
+
+# ------------------------------------------------------------ скорость ответа
+cash5 = order("courier-key-006")
+sent.clear()
+r = hook({"callback_query": {"id": "cb-fast", "data": f"take:{row(cash5).id}",
+                             "from": {"id": B, "first_name": "Курьер502"},
+                             "message": {"message_id": 90, "chat": {"id": B, "type": "private"}}}})
+body = r.json()
+check(13, "Ответ на нажатие — прямо в ответе вебхука, без отдельного запроса",
+      body.get("method") == "answerCallbackQuery" and body.get("callback_query_id") == "cb-fast"
+      and not any(m == "answerCallbackQuery" for t, m, p in sent))
+order_of = [m for t, m, p in sent]
+check(13, "Сначала убирается сообщение доставщика, потом — сотрудникам",
+      bool(order_of) and order_of[0] == "deleteMessage", order_of)
 
 failed = [r for r in results if not r[2]]
 print(f"\nИтого проверок: {len(results)}, не прошло: {len(failed)}")

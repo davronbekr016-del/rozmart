@@ -13,13 +13,14 @@
 покупателю, а перезапуск службы посреди отправки терял бы сообщение молча.
 """
 import html
+import http.client
 import json
 import logging
 import os
+import socket
+import ssl
 import threading
 import time
-import urllib.error
-import urllib.request
 from datetime import timedelta
 
 from sqlalchemy import select
@@ -36,7 +37,11 @@ TOKEN = os.getenv("NOTIFY_BOT_TOKEN", "").strip()
 # когда при старте нет связи.
 USERNAME = os.getenv("NOTIFY_BOT_USERNAME", "").strip().lstrip("@")
 
-API = "https://api.telegram.org/bot{token}/{method}"
+API_HOST = "api.telegram.org"
+# Подключение — коротко: с сервера до Telegram оно иногда зависает
+# (пойманы зависания на 30 секунд), и ждать его дольше бессмысленно —
+# быстрее подключиться заново. Ответа ждём дольше: его Telegram отдаёт сам
+CONNECT_TIMEOUT = 5
 TIMEOUT = 20
 
 # Сколько раз пробуем отправить, прежде чем сдаться. Перегрузка Telegram
@@ -79,22 +84,11 @@ def call(method: str, payload: dict, token: str | None = None) -> dict:
     остаётся голое «HTTP Error 403: Forbidden», по которому непонятно,
     заблокировал ли покупатель бота или неверен токен.
     """
-    request = urllib.request.Request(
-        API.format(token=token or TOKEN, method=method),
-        data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json"},
-    )
+    raw = _post(f"/bot{token or TOKEN}/{method}", json.dumps(payload).encode(), method)
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
-            body = json.loads(response.read())
-    except urllib.error.HTTPError as exc:
-        try:
-            body = json.loads(exc.read())
-        except (ValueError, OSError):
-            raise NotifyError(f"{method}: HTTP {exc.code}") from exc
-    except (urllib.error.URLError, OSError, ValueError) as exc:
-        # сеть или недоступный Telegram — тот случай, когда повтор помогает
-        raise NotifyError(f"{method}: нет связи с Telegram ({exc})") from exc
+        body = json.loads(raw)
+    except ValueError as exc:
+        raise NotifyError(f"{method}: Telegram ответил не JSON") from exc
 
     if body.get("ok"):
         return body.get("result", {})
@@ -106,6 +100,67 @@ def call(method: str, payload: dict, token: str | None = None) -> dict:
     # found» — чата нет вовсе. Ни то, ни другое не исправится повтором
     permanent = code == 403 or (code == 400 and "chat not found" in description.lower())
     raise NotifyError(f"{method}: {code} {description}", permanent, retry_after)
+
+
+# Соединение с Telegram держим открытым — своё у каждого потока: запросы
+# идут и из обработчиков, и из фоновых потоков, а одно соединение на всех
+# пришлось бы запирать. Новое соединение — это ещё и TLS-рукопожатие, около
+# 0,1 с; у бота доставщиков список из 15 заказов — 16 запросов подряд.
+_local = threading.local()
+_tls = ssl.create_default_context()
+
+
+def _connection() -> http.client.HTTPSConnection:
+    conn = getattr(_local, "conn", None)
+    if conn is None:
+        conn = http.client.HTTPSConnection(API_HOST, timeout=CONNECT_TIMEOUT, context=_tls)
+        _local.conn = conn
+    if conn.sock is None:
+        conn.connect()                   # с коротким тайм-аутом подключения
+        conn.sock.settimeout(TIMEOUT)    # а ответа ждём дольше
+    return conn
+
+
+def _drop_connection() -> None:
+    conn = getattr(_local, "conn", None)
+    if conn is not None:
+        conn.close()
+    _local.conn = None
+
+
+def _post(path: str, data: bytes, method: str) -> bytes:
+    """POST к Bot API по открытому соединению. Тело ответа — и при 4xx:
+    в нём Telegram объясняет, что не так.
+
+    Повторяем один раз — и только когда запрос до Telegram точно не дошёл:
+    не удалось подключиться, или Telegram успел закрыть простаивавшее
+    соединение. Повтор после отправленного запроса мог бы прислать
+    сообщение дважды.
+    """
+    for attempt in (1, 2):
+        sent = False
+        try:
+            conn = _connection()
+            conn.request("POST", path, body=data,
+                         headers={"Content-Type": "application/json"})
+            sent = True
+            response = conn.getresponse()
+            body = response.read()
+            if response.status >= 500 and not body:
+                raise NotifyError(f"{method}: HTTP {response.status}")
+            return body
+        except (http.client.RemoteDisconnected, ConnectionResetError, BrokenPipeError) as exc:
+            # простаивавшее соединение закрыли на той стороне — откроем новое
+            _drop_connection()
+            if attempt == 2:
+                raise NotifyError(f"{method}: нет связи с Telegram ({exc})") from exc
+        except (socket.timeout, TimeoutError, OSError, http.client.HTTPException) as exc:
+            _drop_connection()
+            if sent or attempt == 2:
+                # сеть или недоступный Telegram — тот случай, когда повтор
+                # помогает, но уже позже и с очереди
+                raise NotifyError(f"{method}: нет связи с Telegram ({exc})") from exc
+    raise NotifyError(f"{method}: нет связи с Telegram")
 
 
 def bot_username() -> str:

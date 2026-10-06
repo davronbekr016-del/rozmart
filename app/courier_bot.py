@@ -27,6 +27,7 @@
 import hmac
 import logging
 import os
+import threading
 from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, Request
@@ -84,12 +85,36 @@ def safe_call(method: str, payload: dict) -> None:
         log.warning("Бот доставщиков: %s не выполнен: %s", method, exc)
 
 
+# Пока разбирается обновление, ответы не отправляются сразу, а копятся.
+# Ответ на нажатие кнопки уходит прямо в ответе на вебхук — мгновенно и без
+# отдельного запроса, а остальное (убрать сообщение, прислать список,
+# сказать сотрудникам) — следом, в фоне. Иначе кнопка «крутилась» бы, пока
+# сервер по очереди переговорит с Telegram обо всём.
+_out = threading.local()
+
+
+def _later(fn, *args) -> None:
+    box = getattr(_out, "box", None)
+    if box is None:
+        fn(*args)                   # вне вебхука (панель, синхронизация) — сразу
+    else:
+        box.append((fn, args))
+
+
+def flush(box: list) -> None:
+    for fn, args in box:
+        try:
+            fn(*args)
+        except Exception:           # noqa: BLE001
+            log.exception("Бот доставщиков: ответ не отправлен")
+
+
 def send(chat_id: int, text: str, markup: dict | None = None) -> None:
     payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML",
                "disable_web_page_preview": True}
     if markup is not None:
         payload["reply_markup"] = markup
-    safe_call("sendMessage", payload)
+    _later(safe_call, "sendMessage", payload)
 
 
 # ------------------------------------------------------------------ карточка
@@ -248,7 +273,9 @@ def staff(db: Session, background: BackgroundTasks | None, order: Order, text: s
         return
     db.commit()
     ids = [row.id for row in rows]
-    if background is not None:
+    if getattr(_out, "box", None) is not None:
+        _later(notify.send_many, ids)       # после ответа доставщику, не раньше
+    elif background is not None:
         background.add_task(notify.send_many, ids)
     else:
         notify.send_many(ids)
@@ -270,13 +297,17 @@ def edit(chat_id: int, message_id: int, text: str, markup: dict | None) -> None:
                "parse_mode": "HTML", "disable_web_page_preview": True}
     if markup is not None:
         payload["reply_markup"] = markup
-    safe_call("editMessageText", payload)
+    _later(safe_call, "editMessageText", payload)
 
 
 def remove(chat_id: int, message_id: int, fallback: str) -> None:
-    """Убирает сообщение с заказом из чата. Telegram даёт удалять свои
-    сообщения только 48 часов — старше не удалится, тогда хотя бы снимаем
-    с него кнопки и пишем, что с ним стало."""
+    """Убирает сообщение с заказом из чата."""
+    _later(_remove_now, chat_id, message_id, fallback)
+
+
+def _remove_now(chat_id: int, message_id: int, fallback: str) -> None:
+    """Telegram даёт удалять свои сообщения только 48 часов — старше
+    не удалится, тогда хотя бы снимаем с него кнопки и пишем, что с ним стало."""
     try:
         call("deleteMessage", {"chat_id": chat_id, "message_id": message_id})
     except notify.NotifyError as exc:
@@ -285,8 +316,11 @@ def remove(chat_id: int, message_id: int, fallback: str) -> None:
 
 
 def answer(callback_id: str, text: str = "", alert: bool = False) -> None:
-    safe_call("answerCallbackQuery", {"callback_query_id": callback_id, "text": text,
-                                      "show_alert": alert})
+    payload = {"callback_query_id": callback_id, "text": text, "show_alert": alert}
+    if getattr(_out, "box", None) is not None and getattr(_out, "inline", None) is None:
+        _out.inline = {"method": "answerCallbackQuery", **payload}   # в ответе на вебхук
+    else:
+        _later(safe_call, "answerCallbackQuery", payload)
 
 
 def remember(db: Session, sender: dict) -> Courier:
@@ -420,11 +454,18 @@ def handle_callback(db: Session, background: BackgroundTasks, query: dict) -> No
     answer(callback_id)
 
 
-def process(db: Session, background: BackgroundTasks, update_: dict) -> None:
-    if "callback_query" in update_:
-        handle_callback(db, background, update_["callback_query"])
-    elif "message" in update_:
-        handle_message(db, update_["message"])
+def process(db: Session, background: BackgroundTasks, update_: dict):
+    """Разбор обновления. Возвращает ответ для тела вебхука (или None)
+    и то, что отправить следом."""
+    _out.box, _out.inline = [], None
+    try:
+        if "callback_query" in update_:
+            handle_callback(db, background, update_["callback_query"])
+        elif "message" in update_:
+            handle_message(db, update_["message"])
+        return _out.inline, _out.box
+    finally:
+        _out.box, _out.inline = None, None
 
 
 @router.post(WEBHOOK_PATH, include_in_schema=False)
@@ -444,8 +485,11 @@ async def courier_webhook(
     except ValueError:
         return {"ok": True}
     try:
-        await run_in_threadpool(process, db, background, update_)
+        inline, box = await run_in_threadpool(process, db, background, update_)
     except Exception:                       # noqa: BLE001
         db.rollback()
         log.exception("Бот доставщиков: обновление не разобрано")
-    return {"ok": True}
+        return {"ok": True}
+    if box:
+        background.add_task(flush, box)
+    return inline or {"ok": True}
