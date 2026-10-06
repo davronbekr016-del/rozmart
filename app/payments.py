@@ -161,12 +161,61 @@ def is_test(provider: str | None = None) -> bool:
     return ":TEST:" in TOKEN
 
 
+# ------------------------------------------------------------ переключатели
+
+# Администратор включает и выключает способы оплаты в панели: Setting
+# «payment_on:payme» = "0" — выключен. Нет записи — включён. Выключенный
+# способ покупатель не видит (плитка «Скоро»), но уже начатые оплаты и
+# возвраты сервер принимает как прежде — деньги не должны застрять.
+SWITCH_PREFIX = "payment_on:"
+# сколько секунд помним переключатели: читать базу на каждый запрос незачем
+SWITCH_TTL = 5
+_switches = {"at": 0.0, "off": set()}
+
+
+def switched_off() -> set[str]:
+    """Способы, выключенные администратором."""
+    now = time.time()
+    if now - _switches["at"] < SWITCH_TTL:
+        return _switches["off"]
+    from app.db import SessionLocal
+    from app.models import Setting
+
+    db = SessionLocal()
+    try:
+        rows = db.scalars(select(Setting).where(Setting.name.like(SWITCH_PREFIX + "%"))).all()
+        off = {row.name[len(SWITCH_PREFIX):] for row in rows if row.value == "0"}
+    except Exception:                       # noqa: BLE001
+        # база недоступна — оставляем, что знали: молча включить выключенное нельзя
+        log.exception("Переключатели оплаты не прочитаны")
+        off = _switches["off"]
+    finally:
+        db.close()
+    _switches.update(at=now, off=off)
+    return off
+
+
+def set_switch(db, provider: str, on: bool) -> None:
+    from app.models import Setting
+
+    name = SWITCH_PREFIX + provider
+    row = db.get(Setting, name)
+    if row is None:
+        db.add(Setting(name=name, value="1" if on else "0"))
+    else:
+        row.value = "1" if on else "0"
+    db.commit()
+    _switches["at"] = 0.0                   # перечитать сразу, а не через TTL
+
+
 def providers_for(telegram_id: int | None) -> list[str]:
     """Какими способами этому человеку можно платить. Тестовый способ —
     только тестировщикам: иначе любой «оплатит» тестовой картой. В пилоте
     (PAYMENT_TESTERS_ONLY) — и боевой тоже только им."""
     tester = telegram_id is not None and telegram_id in TEST_USERS
-    return [p for p in active() if tester or (not is_test(p) and not TESTERS_ONLY)]
+    off = switched_off()
+    return [p for p in active()
+            if p not in off and (tester or (not is_test(p) and not TESTERS_ONLY))]
 
 
 def available_for(telegram_id: int | None, provider: str | None = None) -> bool:

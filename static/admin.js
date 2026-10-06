@@ -557,6 +557,61 @@
     loadChats();
     loadPriceTypes();
     loadDelivery();
+    loadPaySwitches();
+  }
+
+  // --------------------------------------------------- онлайн-оплата: вкл/выкл
+
+  function loadPaySwitches() {
+    api('/payments').then(renderPaySwitches).catch(function (e) {
+      document.getElementById('paySwitches').textContent = 'Не загрузилось: ' + e.message;
+    });
+  }
+
+  function renderPaySwitches(data) {
+    var box = document.getElementById('paySwitches');
+    box.innerHTML = '';
+    data.providers.forEach(function (p) {
+      var row = el('div');
+      row.style.cssText = 'display:flex;gap:12px;align-items:center;margin-bottom:8px;'
+        + 'max-width:640px;padding:10px 12px;border:1px solid #ECECEC;border-radius:10px';
+      var who = el('div');
+      who.style.cssText = 'flex:1;min-width:0';
+      var title = el('div', null, p.title);
+      title.style.fontWeight = '600';
+      who.appendChild(title);
+      var state = !p.configured ? 'не подключён — покупатели видят «Скоро»'
+        : !p.on ? 'выключен — покупатели видят «Скоро»'
+        : p.testers_only ? 'включён, видят только тестировщики' + (p.test ? ' (тестовый режим)' : '')
+        : 'включён — видят все покупатели';
+      who.appendChild(el('div', 'meta', state));
+      row.appendChild(who);
+
+      var label = document.createElement('label');
+      label.className = 'sw';
+      label.title = p.on ? 'Выключить' : 'Включить';
+      var box2 = document.createElement('input');
+      box2.type = 'checkbox';
+      box2.checked = p.on;
+      box2.onchange = function () {
+        var on = box2.checked;
+        if (!on && !confirm('Выключить ' + p.title + '? Покупатели перестанут видеть этот способ '
+            + 'оплаты. Начатые оплаты пройдут.')) { box2.checked = true; return; }
+        box2.disabled = true;
+        api('/payments/' + p.provider, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ on: on })
+        }).then(function (r) {
+          say(p.title + (on ? ' включён' : ' выключен'), 'ok');
+          renderPaySwitches(r);
+        }).catch(function (e) { say(e.message); box2.checked = !on; box2.disabled = false; });
+      };
+      label.appendChild(box2);
+      label.appendChild(document.createElement('span'));
+      row.appendChild(label);
+      box.appendChild(row);
+    });
   }
 
   // --------------------------------------------------- стоимость доставки

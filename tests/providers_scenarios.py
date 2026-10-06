@@ -150,6 +150,32 @@ check(6, "Пилот: не тестировщик заказ картой не �
       order("prov-key-0010", provider="payme", headers=STRANGER).status_code == 400)
 payments.TESTERS_ONLY, payments.PAYME_TEST = False, True
 
+# ------------------------------------------------------------ переключатели в панели
+ADMIN = init_data(1)
+r = client.get("/api/admin/payments", headers=ADMIN).json()
+check(7, "Панель видит оба способа включёнными", [(p["provider"], p["on"]) for p in r["providers"]]
+      == [("payme", True), ("paynet", True)], r)
+check(7, "Покупатель переключатели не трогает",
+      client.put("/api/admin/payments/payme", json={"on": False}, headers=TESTER).status_code in (401, 404))
+r = client.put("/api/admin/payments/payme", json={"on": False}, headers=ADMIN)
+check(7, "Выключили Payme", r.status_code == 200 and r.json()["providers"][0]["on"] is False)
+opts = client.get("/api/payment-options", headers=TESTER).json()
+check(7, "Покупатель Payme больше не видит", opts["providers"] == ["paynet"], opts)
+check(7, "И заказ через Payme не оформить", order("prov-key-0020", provider="payme").status_code == 400)
+o20 = order("prov-key-0021", provider="paynet").json()
+s20 = SessionLocal(); s20.query(Order).filter_by(number=o20["number"]).update({"pay_provider": "payme"})
+s20.commit(); s20.close()
+r = client.post("/payme", headers=PAYME, json={"jsonrpc": "2.0", "id": 3,
+    "method": "CheckPerformTransaction", "params": {"amount": o20["total"] * 100,
+                                                   "account": {"order_id": o20["number"]}}})
+check(7, "Начатые оплаты Payme сервер всё равно принимает", (r.json().get("result") or {}).get("allow")
+      is True, r.json())
+client.put("/api/admin/payments/payme", json={"on": True}, headers=ADMIN)
+opts = client.get("/api/payment-options", headers=TESTER).json()
+check(7, "Включили обратно — снова виден", opts["providers"] == ["payme", "paynet"])
+check(7, "Неподключённый способ — 404",
+      client.put("/api/admin/payments/telegram", json={"on": True}, headers=ADMIN).status_code == 404)
+
 failed = [r for r in results if not r[2]]
 print(f"\nИтого проверок: {len(results)}, не прошло: {len(failed)}")
 sys.exit(1 if failed else 0)

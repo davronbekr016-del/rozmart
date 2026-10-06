@@ -933,6 +933,48 @@ def set_variant_price(
     return get_product(variant.product_id, db)
 
 
+# ------------------------------------------------------- онлайн-оплата: вкл/выкл
+
+PROVIDER_TITLES = {"payme": "Payme", "paynet": "Paynet", "telegram": "Telegram"}
+
+
+def _payment_switches() -> dict:
+    off = payments.switched_off()
+    shown = [p for p in ("payme", "paynet") if p in payments.PROVIDERS] + \
+        [p for p in payments.PROVIDERS if p not in ("payme", "paynet")]
+    return {"providers": [{
+        "provider": p,
+        "title": PROVIDER_TITLES.get(p, p),
+        "on": p not in off,
+        # ключи заданы — способ может работать; нет — покупатель видит «Скоро»
+        "configured": payments.configured(p),
+        "test": payments.is_test(p),
+        "testers_only": payments.is_test(p) or payments.TESTERS_ONLY,
+    } for p in shown]}
+
+
+@router.get("/payments")
+def payment_switches(_: TelegramUser = Depends(require_admin)):
+    """Способы онлайн-оплаты и их переключатели."""
+    return _payment_switches()
+
+
+class PaymentSwitchIn(BaseModel):
+    on: bool
+
+
+@router.put("/payments/{provider}")
+def set_payment_switch(provider: str, data: PaymentSwitchIn, db: Session = Depends(get_db),
+                       _: TelegramUser = Depends(require_admin)):
+    """Включить или выключить способ оплаты для покупателей. Начатые оплаты
+    и возвраты сервер принимает в любом случае."""
+    if provider not in payments.PROVIDERS:
+        raise HTTPException(status_code=404, detail="Такой способ оплаты не подключён")
+    payments.set_switch(db, provider, data.on)
+    log.info("Онлайн-оплата %s: %s", provider, "включена" if data.on else "выключена")
+    return _payment_switches()
+
+
 class DeliveryPriceIn(BaseModel):
     # 0 — бесплатная доставка
     price: int = Field(ge=0, le=1_000_000)

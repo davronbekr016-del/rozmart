@@ -38,6 +38,15 @@ textarea{resize:vertical;min-height:70px}
 .pill.ok{background:#E8F5E9;color:#2E7D32}
 .pill.no{background:#F2F2F2;color:#8A8A8A}
 .pill.warn{background:#FFF3E0;color:#E65100}
+/* переключатель вкл/выкл */
+.sw{position:relative;display:inline-block;width:46px;height:26px;flex:none}
+.sw input{opacity:0;width:0;height:0}
+.sw span{position:absolute;inset:0;background:#D5D5D5;border-radius:13px;cursor:pointer;transition:.2s}
+.sw span::before{content:"";position:absolute;width:20px;height:20px;left:3px;top:3px;
+  background:#fff;border-radius:50%;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.sw input:checked + span{background:#2E7D32}
+.sw input:checked + span::before{transform:translateX(20px)}
+.sw input:disabled + span{opacity:.5;cursor:default}
 table{width:100%;border-collapse:collapse}
 th,td{text-align:left;padding:10px 8px;border-bottom:1px solid #F0F0F0;font-size:13px}
 th{color:#8A8A8A;font-weight:500;font-size:12px}
@@ -143,6 +152,11 @@ button.act.blue:hover{background:#1A56DB}
           видит свободные заказы с телефоном и адресом покупателя. Отключённый
           доставщик теряет доступ, а его заказы в пути снова становятся свободными.</p>
         <div id="couriers" style="margin-bottom:26px"></div>
+
+        <h3 style="margin:0 0 4px;font-size:15px">Онлайн-оплата</h3>
+        <p class="meta" style="margin:0 0 12px">Выключенный способ покупатели не видят —
+          на его плитке «Скоро». Начатые оплаты и возвраты при этом проходят как обычно.</p>
+        <div id="paySwitches" style="margin-bottom:26px"></div>
 
         <h3 style="margin:0 0 4px;font-size:15px">Стоимость доставки</h3>
         <p class="meta" style="margin:0 0 12px">Для новых заказов. Уже оформленные
